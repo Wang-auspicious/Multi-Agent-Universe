@@ -21,7 +21,6 @@ _flash: genai.GenerativeModel | None = None
 
 
 def _get_flash() -> genai.GenerativeModel:
-    """懒加载：运行时动态选最新可用 Flash 模型，避免 v1beta 废弃路径。"""
     global _flash
     if _flash is not None:
         return _flash
@@ -29,10 +28,10 @@ def _get_flash() -> genai.GenerativeModel:
         m.name for m in genai.list_models()
         if "generateContent" in m.supported_generation_methods
     ]
-    # 优先 flash-2，其次任意 flash，兜底第一个可用模型
+    # 强制锁定 1.5-flash，它拥有最高的免费配额 (1500 RPM)
     target = (
-        next((m for m in available if "flash-2" in m or "2.0-flash" in m or "2.5-flash" in m), None)
-        or next((m for m in available if "flash" in m), None)
+        next((m for m in available if "1.5-flash" in m.lower()), None)
+        or next((m for m in available if "flash" in m.lower() and "2." not in m), None)
         or available[0]
     )
     _flash = genai.GenerativeModel(

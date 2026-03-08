@@ -4,6 +4,9 @@ import os
 import sys
 import io
 import traceback
+import streamlit as st
+import google.generativeai as genai
+from dotenv import load_dotenv
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 强制环境编码修复 (必须在所有导入前尽可能早)
@@ -38,6 +41,27 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "tracker" not in st.session_state:
     st.session_state.tracker = CostTracker(budget=BUDGET)
+
+# ── 辅助函数：动态获取可用的 Gemini 模型 ──────────────────────────────────────
+def get_fallback_model():
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"), transport="rest")
+    try:
+        available = [
+            m.name for m in genai.list_models()
+            if "generateContent" in m.supported_generation_methods
+        ]
+        # 严格过滤：锁定 1.5-flash，避开 2.x
+        target = (
+            next((m for m in available if "1.5-flash" in m.lower()), None) or
+            next((m for m in available if "flash" in m.lower() and "2." not in m), None) or
+            available[0]
+        )
+        return genai.GenerativeModel(
+            model_name=target,
+            system_instruction="你是一个高级助理，请简短回答。",
+        )
+    except Exception:
+        return genai.GenerativeModel("models/gemini-1.5-flash")
 
 # ── 侧边栏 ────────────────────────────────────────────────────────────────────
 def render_sidebar(tracker: CostTracker) -> None:
@@ -93,9 +117,7 @@ if prompt := st.chat_input("输入指令..."):
                 result_container.markdown(result)
                 st.session_state.messages.append({"role": "assistant", "content": result})
             else:
-                # Gemini 兜底
-                genai.configure(api_key=os.getenv("GEMINI_API_KEY"), transport="rest")
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = get_fallback_model()
                 gemini_resp = model.generate_content(prompt)
                 answer = gemini_resp.text
                 result_container.markdown(answer)
@@ -103,7 +125,6 @@ if prompt := st.chat_input("输入指令..."):
 
         except Exception as e:
             log_container.empty()
-            # 关键：显示详细堆栈，帮助定位具体的库
             error_details = traceback.format_exc()
             result_container.error(f"❌ 执行失败: {e}")
             with st.expander("📄 错误详情 (Traceback)", expanded=True):

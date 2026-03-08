@@ -22,27 +22,21 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"), transport="rest")
 _cached_model: genai.GenerativeModel | None = None
 
 def _get_working_model() -> genai.GenerativeModel:
-    """动态探测并锁定一个可用的 Flash 模型"""
+    """动态探测并锁定一个可用的 Flash 模型 (严格排除 2.x 系列)"""
     global _cached_model
     if _cached_model:
         return _cached_model
         
     try:
-        # 获取所有支持生成内容的消息列表
         available = [
             m.name for m in genai.list_models()
             if "generateContent" in m.supported_generation_methods
         ]
         
-        # 严格筛选优先级：
-        # 1. 1.5-flash (最稳定)
-        # 2. 2.0-flash (最新)
-        # 3. 任何包含 flash 的模型
-        # 4. 避开 pro (防止 429)
+        # 优先级：1. 强制 1.5-flash -> 2. 避开 2.x 的其他 flash -> 3. 兜底
         target = (
             next((m for m in available if "1.5-flash" in m.lower()), None)
-            or next((m for m in available if "flash" in m.lower()), None)
-            or next((m for m in available if "pro" not in m.lower()), None)
+            or next((m for m in available if "flash" in m.lower() and "2." not in m), None)
             or available[0]
         )
         
