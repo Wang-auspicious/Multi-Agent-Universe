@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import os
+import sys
+import io
+import traceback
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 强制环境编码修复 (必须在所有导入前尽可能早)
+# ──────────────────────────────────────────────────────────────────────────────
+os.environ["PYTHONUTF8"] = "1"
+os.environ["PYTHONIOENCODING"] = "utf-8"
+
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+import streamlit as st
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+# ── 基础配置 & 代理设置 ────────────────────────────────────────────────────────
+load_dotenv()
+os.environ.setdefault("http_proxy", "http://127.0.0.1:7897")
+os.environ.setdefault("https_proxy", "http://127.0.0.1:7897")
+
+st.set_page_config(page_title="Multi-Agent Universe", page_icon="🤖", layout="wide")
+
+from agents.cost_tracker import CostTracker
+from agents.agent_log import LogEntry
+from agents.orchestrator import run as orchestrate
+
+BUDGET = 3.97
+
+# ── Session State 初始化 ──────────────────────────────────────────────────────
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "tracker" not in st.session_state:
+    st.session_state.tracker = CostTracker(budget=BUDGET)
+
+# ── 侧边栏 ────────────────────────────────────────────────────────────────────
+def render_sidebar(tracker: CostTracker) -> None:
+    with st.sidebar:
+        st.title("📊 实时监控")
+        st.divider()
+        col1, col2 = st.columns(2)
+        col1.metric("已用金额", f"${tracker.used:.4f}")
+        col2.metric("剩余余额", f"${tracker.remaining:.4f}")
+        st.divider()
+        st.caption(f"累计 Tokens: {tracker.total_tokens:,}")
+
+render_sidebar(st.session_state.tracker)
+
+# ── 主界面 ────────────────────────────────────────────────────────────────────
+st.title("🤖 Multi-Agent Universe")
+st.divider()
+
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# ── 输入处理 ──────────────────────────────────────────────────────────────────
+if prompt := st.chat_input("输入指令..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        log_container = st.empty()
+        result_container = st.empty()
+        live_logs: list[LogEntry] = []
+
+        def log_cb(entry: LogEntry) -> None:
+            live_logs.append(entry)
+            lines = [f"`[{e.timestamp}]` **{e.agent}** — {e.message}" for e in live_logs]
+            log_container.markdown("\n".join(lines))
+
+        try:
+            result, tracker = orchestrate(
+                prompt,
+                tracker=st.session_state.tracker,
+                log_cb=log_cb,
+            )
+            st.session_state.tracker = tracker
+            log_container.empty()
+            
+            with st.expander("🔍 Agent 执行日志", expanded=False):
+                for e in live_logs:
+                    st.caption(f"[{e.timestamp}] **{e.agent}** — {e.message}")
+
+            if result:
+                result_container.markdown(result)
+                st.session_state.messages.append({"role": "assistant", "content": result})
+            else:
+                # Gemini 兜底
+                genai.configure(api_key=os.getenv("GEMINI_API_KEY"), transport="rest")
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                gemini_resp = model.generate_content(prompt)
+                answer = gemini_resp.text
+                result_container.markdown(answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+
+        except Exception as e:
+            log_container.empty()
+            # 关键：显示详细堆栈，帮助定位具体的库
+            error_details = traceback.format_exc()
+            result_container.error(f"❌ 执行失败: {e}")
+            with st.expander("📄 错误详情 (Traceback)", expanded=True):
+                st.code(error_details)
+            
+            st.session_state.messages.append({"role": "assistant", "content": f"❌ 执行失败: {e}"})
+            st.stop()
+
+    st.rerun()
