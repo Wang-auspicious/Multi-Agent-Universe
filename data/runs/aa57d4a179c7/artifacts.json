@@ -1,0 +1,14 @@
+[
+  {
+    "kind": "command_result",
+    "path": null,
+    "content": "{\"ok\": false, \"stdout\": \"\", \"stderr\": \"Command not in whitelist: (get-childitem\", \"exit_code\": 126, \"artifacts\": [], \"duration_ms\": 0, \"command\": \"(Get-ChildItem -Recurse -File -Filter *.py -ErrorAction SilentlyContinue | Measure-Object).Count\"}",
+    "meta": {}
+  },
+  {
+    "kind": "command_result",
+    "path": null,
+    "content": "{\"ok\": false, \"stdout\": \"\", \"stderr\": \"Command not in whitelist: (get-childitem\", \"exit_code\": 126, \"artifacts\": [], \"duration_ms\": 0, \"command\": \"(Get-ChildItem -Recurse -File -Filter *.py -ErrorAction SilentlyContinue | Measure-Object).Count\"}",
+    "meta": {}
+  }
+]

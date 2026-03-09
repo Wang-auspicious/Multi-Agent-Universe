@@ -1,0 +1,1 @@
+Offline fallback: Gemini unavailable, workflow completed with local heuristics.

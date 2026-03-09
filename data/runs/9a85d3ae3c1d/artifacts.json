@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "command_result",
+    "path": null,
+    "content": "{\"ok\": true, \"stdout\": \"M README.md\\n M dashboard.py\\n M main.py\\n?? Star-Office-UI-1.0.0/\\n?? agent_os/\\n?? configs/\\n?? data/\\n?? pytest.ini\\n?? tests/\", \"stderr\": \"warning: could not open directory 'pytest-cache-files-148xbbrk/': Permission denied\\nwarning: could not open directory 'pytest-cache-files-9imbp3nq/': Permission denied\\nwarning: could not open directory 'pytest-cache-files-i282lc7z/': Permission denied\\nwarning: could not open directory 'pytest-cache-files-kwigxq0e/': Permission denied\\nwarning: could not open directory 'pytest-cache-files-n7fvjman/': Permission denied\\nwarning: could not open directory 'pytest-cache-files-njypkrbw/': Permission denied\\nwarning: could not open directory 'pytest-cache-files-pwgqrgil/': Permission denied\", \"exit_code\": 0, \"artifacts\": [], \"duration_ms\": 150, \"command\": \"git status --short\"}",
+    "meta": {}
+  }
+]

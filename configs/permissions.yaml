@@ -1,0 +1,9 @@
+﻿command_whitelist:
+  - git
+  - python
+  - pytest
+  - node
+  - npm
+  - pnpm
+network_default: disabled
+destructive_requires_confirm: true

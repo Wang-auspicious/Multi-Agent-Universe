@@ -1,0 +1,6 @@
+{"event_type": "task.created", "task_id": "ffe49d73f0f7", "payload": {"goal": "你能查看我的本地文件吗"}, "created_at": "2026-03-08T10:03:53.056351"}
+{"event_type": "task.assigned", "task_id": "ffe49d73f0f7", "payload": {"target_agent": "coder", "executor": "local_agent", "requested_executor": "local_agent", "reason": "Default coding workflow path", "override": true, "fallback_to_shell": false}, "created_at": "2026-03-08T10:03:53.064191"}
+{"event_type": "agent.started", "task_id": "ffe49d73f0f7", "payload": {"agent": "coder", "executor": "local_agent"}, "created_at": "2026-03-08T10:03:53.068999"}
+{"event_type": "agent.started", "task_id": "ffe49d73f0f7", "payload": {"agent": "reviewer"}, "created_at": "2026-03-08T10:03:56.203546"}
+{"event_type": "agent.started", "task_id": "ffe49d73f0f7", "payload": {"agent": "summarizer"}, "created_at": "2026-03-08T10:03:56.211189"}
+{"event_type": "task.completed", "task_id": "ffe49d73f0f7", "payload": {"status": "done", "tokens": 145, "cost_usd": 0.001305, "executor": "local_agent"}, "created_at": "2026-03-08T10:03:58.072662"}

@@ -1,0 +1,1 @@
+Star Office bridge ready.

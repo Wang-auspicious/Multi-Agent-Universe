@@ -1,0 +1,9 @@
+{"event_type": "task.created", "task_id": "1bd83fc1a002", "payload": {"goal": "统计.py文件数"}, "created_at": "2026-03-08T09:15:56.806576"}
+{"event_type": "task.assigned", "task_id": "1bd83fc1a002", "payload": {"target_agent": "coder", "executor": "shell", "requested_executor": "shell", "reason": "Default coding workflow path", "override": true, "fallback_to_shell": false}, "created_at": "2026-03-08T09:15:56.817075"}
+{"event_type": "agent.started", "task_id": "1bd83fc1a002", "payload": {"agent": "coder", "executor": "shell"}, "created_at": "2026-03-08T09:15:56.824981"}
+{"event_type": "command.started", "task_id": "1bd83fc1a002", "payload": {"command": "python -c \"from pathlib import Path; print(sum(1 for p in Path('.').rglob('*.py') if p.is_file()))\""}, "created_at": "2026-03-08T09:15:57.016446"}
+{"event_type": "command.finished", "task_id": "1bd83fc1a002", "payload": {"ok": true, "stdout": "74", "stderr": "", "exit_code": 0, "artifacts": [], "duration_ms": 183, "command": "python -c \"from pathlib import Path; print(sum(1 for p in Path('.').rglob('*.py') if p.is_file()))\""}, "created_at": "2026-03-08T09:15:57.027102"}
+{"event_type": "diff.generated", "task_id": "1bd83fc1a002", "payload": {"artifacts": 1, "executor": "shell"}, "created_at": "2026-03-08T09:15:57.036777"}
+{"event_type": "agent.started", "task_id": "1bd83fc1a002", "payload": {"agent": "reviewer"}, "created_at": "2026-03-08T09:15:57.046666"}
+{"event_type": "agent.started", "task_id": "1bd83fc1a002", "payload": {"agent": "summarizer"}, "created_at": "2026-03-08T09:15:57.055493"}
+{"event_type": "task.completed", "task_id": "1bd83fc1a002", "payload": {"status": "done", "tokens": 85, "cost_usd": 0.000765, "executor": "shell"}, "created_at": "2026-03-08T09:15:58.754642"}

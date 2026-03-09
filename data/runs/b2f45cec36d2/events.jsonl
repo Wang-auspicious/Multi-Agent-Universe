@@ -1,0 +1,15 @@
+{"event_type": "task.created", "task_id": "b2f45cec36d2", "payload": {"goal": "refactor cache layer"}, "created_at": "2026-03-08T08:12:11.827865"}
+{"event_type": "task.assigned", "task_id": "b2f45cec36d2", "payload": {"target_agent": "coder", "executor": "gemini_cli", "reason": "Default coding workflow path", "override": true}, "created_at": "2026-03-08T08:12:11.837925"}
+{"event_type": "agent.started", "task_id": "b2f45cec36d2", "payload": {"agent": "coder", "executor": "gemini_cli"}, "created_at": "2026-03-08T08:12:11.849764"}
+{"event_type": "command.started", "task_id": "b2f45cec36d2", "payload": {"command": "gemini"}, "created_at": "2026-03-08T08:12:11.899180"}
+{"event_type": "command.finished", "task_id": "b2f45cec36d2", "payload": {"command": "gemini", "ok": false, "stdout": "", "stderr": "binary not found", "exit_code": 127, "duration_ms": 0, "artifacts": []}, "created_at": "2026-03-08T08:12:11.909017"}
+{"event_type": "diff.generated", "task_id": "b2f45cec36d2", "payload": {"artifacts": 1, "executor": "gemini_cli"}, "created_at": "2026-03-08T08:12:11.917992"}
+{"event_type": "agent.started", "task_id": "b2f45cec36d2", "payload": {"agent": "reviewer"}, "created_at": "2026-03-08T08:12:11.927493"}
+{"event_type": "review.failed", "task_id": "b2f45cec36d2", "payload": {"feedback": "Command failed (gemini): exit_code=127", "retry": 1}, "created_at": "2026-03-08T08:12:11.936177"}
+{"event_type": "agent.started", "task_id": "b2f45cec36d2", "payload": {"agent": "coder", "executor": "gemini_cli"}, "created_at": "2026-03-08T08:12:11.945892"}
+{"event_type": "command.started", "task_id": "b2f45cec36d2", "payload": {"command": "gemini"}, "created_at": "2026-03-08T08:12:11.991662"}
+{"event_type": "command.finished", "task_id": "b2f45cec36d2", "payload": {"command": "gemini", "ok": false, "stdout": "", "stderr": "binary not found", "exit_code": 127, "duration_ms": 0, "artifacts": []}, "created_at": "2026-03-08T08:12:12.000436"}
+{"event_type": "diff.generated", "task_id": "b2f45cec36d2", "payload": {"artifacts": 1, "executor": "gemini_cli"}, "created_at": "2026-03-08T08:12:12.010197"}
+{"event_type": "review.failed", "task_id": "b2f45cec36d2", "payload": {"approved": false, "feedback": "Command failed (gemini): exit_code=127", "risk_points": ["Command failed (gemini): exit_code=127"]}, "created_at": "2026-03-08T08:12:12.019695"}
+{"event_type": "agent.started", "task_id": "b2f45cec36d2", "payload": {"agent": "summarizer"}, "created_at": "2026-03-08T08:12:12.037120"}
+{"event_type": "task.completed", "task_id": "b2f45cec36d2", "payload": {"status": "blocked", "tokens": 111, "cost_usd": 0.000999, "executor": "gemini_cli"}, "created_at": "2026-03-08T08:12:13.045139"}

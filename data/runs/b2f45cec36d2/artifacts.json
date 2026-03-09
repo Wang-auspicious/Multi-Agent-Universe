@@ -1,0 +1,14 @@
+[
+  {
+    "kind": "command_result",
+    "path": null,
+    "content": "{\"command\": \"gemini\", \"ok\": false, \"stdout\": \"\", \"stderr\": \"binary not found\", \"exit_code\": 127, \"duration_ms\": 0, \"artifacts\": []}",
+    "meta": {}
+  },
+  {
+    "kind": "command_result",
+    "path": null,
+    "content": "{\"command\": \"gemini\", \"ok\": false, \"stdout\": \"\", \"stderr\": \"binary not found\", \"exit_code\": 127, \"duration_ms\": 0, \"artifacts\": []}",
+    "meta": {}
+  }
+]

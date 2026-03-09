@@ -1,0 +1,15 @@
+{"event_type": "task.created", "task_id": "f08bbeecb20a", "payload": {"goal": "use claude executor to refactor"}, "created_at": "2026-03-08T08:15:24.453459"}
+{"event_type": "task.assigned", "task_id": "f08bbeecb20a", "payload": {"target_agent": "coder", "executor": "claude_cli", "reason": "Task explicitly requests Claude CLI executor", "override": true}, "created_at": "2026-03-08T08:15:24.462074"}
+{"event_type": "agent.started", "task_id": "f08bbeecb20a", "payload": {"agent": "coder", "executor": "claude_cli"}, "created_at": "2026-03-08T08:15:24.467728"}
+{"event_type": "command.started", "task_id": "f08bbeecb20a", "payload": {"command": "claude"}, "created_at": "2026-03-08T08:15:24.499132"}
+{"event_type": "command.finished", "task_id": "f08bbeecb20a", "payload": {"command": "claude", "ok": false, "stdout": "", "stderr": "binary not found", "exit_code": 127, "duration_ms": 0, "artifacts": []}, "created_at": "2026-03-08T08:15:24.505960"}
+{"event_type": "diff.generated", "task_id": "f08bbeecb20a", "payload": {"artifacts": 1, "executor": "claude_cli"}, "created_at": "2026-03-08T08:15:24.511452"}
+{"event_type": "agent.started", "task_id": "f08bbeecb20a", "payload": {"agent": "reviewer"}, "created_at": "2026-03-08T08:15:24.519507"}
+{"event_type": "review.failed", "task_id": "f08bbeecb20a", "payload": {"feedback": "Command failed (claude): exit_code=127", "retry": 1}, "created_at": "2026-03-08T08:15:24.526829"}
+{"event_type": "agent.started", "task_id": "f08bbeecb20a", "payload": {"agent": "coder", "executor": "claude_cli"}, "created_at": "2026-03-08T08:15:24.533043"}
+{"event_type": "command.started", "task_id": "f08bbeecb20a", "payload": {"command": "claude"}, "created_at": "2026-03-08T08:15:24.572525"}
+{"event_type": "command.finished", "task_id": "f08bbeecb20a", "payload": {"command": "claude", "ok": false, "stdout": "", "stderr": "binary not found", "exit_code": 127, "duration_ms": 0, "artifacts": []}, "created_at": "2026-03-08T08:15:24.583526"}
+{"event_type": "diff.generated", "task_id": "f08bbeecb20a", "payload": {"artifacts": 1, "executor": "claude_cli"}, "created_at": "2026-03-08T08:15:24.592556"}
+{"event_type": "review.failed", "task_id": "f08bbeecb20a", "payload": {"approved": false, "feedback": "Command failed (claude): exit_code=127", "risk_points": ["Command failed (claude): exit_code=127"]}, "created_at": "2026-03-08T08:15:24.600178"}
+{"event_type": "agent.started", "task_id": "f08bbeecb20a", "payload": {"agent": "summarizer"}, "created_at": "2026-03-08T08:15:24.613788"}
+{"event_type": "task.completed", "task_id": "f08bbeecb20a", "payload": {"status": "blocked", "tokens": 114, "cost_usd": 0.001026, "executor": "claude_cli"}, "created_at": "2026-03-08T08:15:25.307641"}

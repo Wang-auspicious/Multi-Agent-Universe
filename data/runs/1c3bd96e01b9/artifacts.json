@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "command_result",
+    "path": null,
+    "content": "{\"ok\": true, \"stdout\": \"74\", \"stderr\": \"\", \"exit_code\": 0, \"artifacts\": [], \"duration_ms\": 196, \"command\": \"python -c \\\"from pathlib import Path; print(sum(1 for p in Path('.').rglob('*.py') if p.is_file()))\\\"\"}",
+    "meta": {}
+  }
+]

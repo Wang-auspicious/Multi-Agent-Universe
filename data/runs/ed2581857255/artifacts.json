@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "command_result",
+    "path": null,
+    "content": "{\"tool\": \"read_file\", \"ok\": true, \"stdout\": \"﻿# Personal Coding Workflow Agent OS\\n\\nMVP implemented in `agent_os/` with:\\n- Router -> Coder -> Reviewer -> Summarizer pipeline\\n- Structured task and event model\\n- Shell executor + Codex/Gemini/Claude executor stubs\\n- SQLite memory (`data/agent_os.db`)\\n- CLI runner and Streamlit dashboard\\n- Star Office UI bridge (`agent_os/apps/ui_bridge.py`)\\n\\n## Quick start\\n\\n```bash\\npython main.py \\\"Run project tests and summarize results\\\"\\npython main.py --dashboard\\n```\\n\\n## Bridge to Star Office\\n\\n```bash\\npython -m agent_os.apps.ui_bridge <task_id>\\n```\\n\", \"stderr\": \"\", \"exit_code\": 0, \"artifacts\": [\"C:\\\\Users\\\\zjz65\\\\PycharmProjects\\\\my_agent_universe\\\\readme.md\"], \"duration_ms\": 0}",
+    "meta": {}
+  }
+]

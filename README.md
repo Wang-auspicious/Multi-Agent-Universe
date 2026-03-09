@@ -1,27 +1,79 @@
-# my_agent_universe
+# Multi-Agent Project Workspace
 
-基于 Gemini 的多 Agent 协作系统，支持联网搜索与智能分析。
+A local-first multi-agent coding workspace for a single repository.
 
-```
-my_agent_universe/
-├── main.py              # 入口，单轮对话循环
-├── agents/
-│   ├── orchestrator.py  # 调度主控
-│   ├── search_agent.py  # 搜索 Agent
-│   └── analysis_agent.py# 分析 Agent
-├── Tools/
-│   ├── web_search.py    # SerpAPI 联网搜索
-│   ├── text_extract.py  # 文本提取
-│   └── summarizer.py    # 摘要生成
-├── config/settings.py   # 全局配置
-├── memory/context_store.py # 上下文存储
-├── logs/                # 运行日志
-└── .env                 # API Keys
+## What It Does
+The system is centered on a collaborative execution path:
+- `Planner` breaks a natural-language goal into work items
+- `Coder` inspects and modifies repo files with local tools
+- `Writer` drafts docs, explanations, and user-facing text
+- `Reviewer` checks whether outputs match the goal and flags risks
+
+All of this runs inside the current repository boundary.
+
+## Main Path
+Recommended executor: `collab_agent`
+
+It supports:
+- natural-language project tasks
+- reading local files
+- writing files inside the repo
+- searching code
+- running safe shell commands
+- returning a final answer after multi-agent collaboration
+
+## Quick Start
+```bash
+python main.py --healthcheck --repo .
+python main.py --chat --repo . --executor collab_agent --strict-executor
+python main.py "请分析当前项目结构并给出一个 README 重写计划" --repo . --executor collab_agent --strict-executor
+python main.py --dashboard
+python main.py --star-office
 ```
 
-## 环境变量
+## Workbench
+- python main.py --dashboard now opens the local desktop workbench
+- multi-tab file editing with a side diff rail
+- snippet patching, patch history, and rollback from the same surface
+- task control, chat thread, artifact review, and replay rail in one place
 
+
+## Star Office UI
+A local launcher is now available:
+```bash
+python main.py --star-office
 ```
-GEMINI_API_KEY=
-SERPAPI_KEY=
+This starts the bundled Star Office backend on `http://127.0.0.1:19000`.
+
+You can also sync task progress into Star Office state:
+```bash
+python -m agent_os.apps.ui_bridge <task_id>
+python -m agent_os.apps.ui_bridge <task_id> --watch
 ```
+
+## Project Structure
+- `agent_os/`: main runtime, agents, executors, tools, memory, and desktop workbench
+- `configs/`: model and permission config
+- `tests/`: test suite
+- `scripts/`: helper scripts
+- `Star-Office-UI-1.0.0/`: bundled visual office shell
+
+## Key Design Principles
+- one orchestrator shell, multiple role agents
+- local tools are controlled by the app, not by the model directly
+- model handles planning and reasoning
+- repo access stays inside the workspace boundary
+- keep project structure clean and easy to extend
+
+## Current Default Roles
+- `Planner`
+- `Coder`
+- `Writer`
+- `Reviewer`
+
+## Notes
+- shell is now explicit-command only; it is no longer used as fake natural-language execution
+- --web-dashboard now aliases to the same desktop workbench entry instead of the old browser page
+- external CLI executors (codex_cli, gemini_cli, claude_cli) are optional and depend on each machine''s installation/login state
+
+

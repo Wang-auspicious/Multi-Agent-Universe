@@ -1,0 +1,5 @@
+﻿[default]
+router = "gemini_flash"
+coder = "gemini_flash"
+reviewer = "gemini_flash"
+summarizer = "gemini_flash"

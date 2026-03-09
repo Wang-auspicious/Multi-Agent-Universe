@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -19,3 +19,11 @@ logs/
 memory/*.json
 !memory/__init__.py
 C:\Users\zjz65\.claude/
+
+.pytest_tmp/
+pytest-cache-files-*/
+
+# New ignores
+openclaw-main/
+vscode-main/
+

@@ -1,0 +1,189 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Universe Workbench</title>
+  <link rel="stylesheet" href="/static/workbench.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="activity-bar">
+      <div class="brand-glyph">AI</div>
+      <button class="activity active">▣</button>
+      <button class="activity">⌕</button>
+      <button class="activity">⑂</button>
+      <button class="activity">◎</button>
+    </aside>
+
+    <div class="desktop-shell">
+      <header class="topbar">
+        <div class="menu-strip">File Edit Selection View Go Run Terminal Help</div>
+        <div class="command-pill">
+          <span class="command-icon">⌕</span>
+          <span id="repoNameTop">Agent Universe</span>
+        </div>
+        <div class="window-tools">
+          <span class="chip" id="branchBadge">branch</span>
+          <span class="chip" id="modifiedBadge">0 modified</span>
+        </div>
+      </header>
+
+      <div class="workspace-grid">
+        <section class="explorer-pane panel">
+          <div class="pane-title-row">
+            <div>
+              <div class="eyebrow">Explorer</div>
+              <div class="pane-title" id="repoNameSide">Repository</div>
+            </div>
+            <button class="ghost-btn" id="refreshExplorer">Refresh</button>
+          </div>
+
+          <div class="filter-stack">
+            <input id="fileQuery" class="input" placeholder="Search files, folders, symbols">
+            <label class="toggle-row">
+              <input id="includeArchives" type="checkbox">
+              <span>Include reference source archives</span>
+            </label>
+          </div>
+
+          <div class="tree-wrap" id="fileTree"></div>
+        </section>
+
+        <section class="editor-pane panel">
+          <div class="editor-tabs" id="editorTabs"></div>
+
+          <div class="editor-toolbar">
+            <div class="path-block">
+              <div class="eyebrow">Editor</div>
+              <div class="current-path" id="currentPath">No file selected</div>
+            </div>
+            <div class="toolbar-actions">
+              <button class="ghost-btn" id="reloadFile">Reload</button>
+              <button class="ghost-btn" id="saveFile">Save</button>
+            </div>
+          </div>
+
+          <div class="editor-surface">
+            <div class="line-gutter" id="lineNumbers"></div>
+            <textarea id="editorInput" spellcheck="false" placeholder="Open a file from the explorer to start editing."></textarea>
+          </div>
+
+          <div class="drawer-shell">
+            <div class="drawer-tabs">
+              <button class="drawer-tab active" data-drawer="diff">Diff</button>
+              <button class="drawer-tab" data-drawer="snippet">Snippet Edit</button>
+              <button class="drawer-tab" data-drawer="history">History</button>
+            </div>
+
+            <div class="drawer-view active" data-drawer-view="diff">
+              <pre id="diffOutput" class="code-panel"></pre>
+            </div>
+
+            <div class="drawer-view" data-drawer-view="snippet">
+              <div class="snippet-grid">
+                <div class="snippet-col">
+                  <div class="eyebrow">Find snippet</div>
+                  <textarea id="findSnippet" class="mini-editor"></textarea>
+                </div>
+                <div class="snippet-col">
+                  <div class="eyebrow">Replace with</div>
+                  <textarea id="replaceSnippet" class="mini-editor"></textarea>
+                </div>
+              </div>
+              <div class="snippet-actions">
+                <button class="ghost-btn" id="copySelectionToFind">Selection → Find</button>
+                <button class="ghost-btn" id="copySelectionToReplace">Selection → Replace</button>
+                <label class="count-box">Count <input id="snippetCount" type="number" min="1" value="1"></label>
+                <button class="primary-btn" id="applySnippet">Apply Snippet Patch</button>
+              </div>
+            </div>
+
+            <div class="drawer-view" data-drawer-view="history">
+              <div class="history-layout">
+                <div class="history-list" id="historyList"></div>
+                <div class="history-detail">
+                  <div class="history-actions">
+                    <button class="ghost-btn" id="refreshHistory">Refresh</button>
+                    <button class="ghost-btn" id="rollbackHistory">Rollback Selected</button>
+                  </div>
+                  <pre id="historyDiff" class="code-panel"></pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="assistant-pane panel">
+          <div class="assistant-head">
+            <div>
+              <div class="eyebrow">Agent</div>
+              <div class="pane-title">Workspace Copilot</div>
+            </div>
+            <div class="assistant-chips">
+              <span class="chip success" id="executorHealth">ready</span>
+              <button class="ghost-btn" id="newChatButton">New Chat</button>
+            </div>
+          </div>
+
+          <div class="select-row">
+            <select id="chatSelect" class="input select"></select>
+            <select id="executorSelect" class="input select"></select>
+          </div>
+
+          <div class="assistant-tabs">
+            <button class="assistant-tab active" data-view="agent">Agent</button>
+            <button class="assistant-tab" data-view="task">Task</button>
+            <button class="assistant-tab" data-view="trace">Trace</button>
+          </div>
+
+          <div class="assistant-body">
+            <section class="assistant-view active" data-view-panel="agent">
+              <div class="message-stream" id="messageStream"></div>
+            </section>
+
+            <section class="assistant-view" data-view-panel="task">
+              <div class="task-summary-card">
+                <div class="task-title-row">
+                  <div>
+                    <div class="eyebrow">Selected task</div>
+                    <div class="task-title" id="taskTitle">No task selected</div>
+                  </div>
+                  <div class="task-meta" id="taskMeta">idle</div>
+                </div>
+                <pre id="taskSummary" class="code-panel summary-panel"></pre>
+              </div>
+              <div class="artifact-list" id="artifactList"></div>
+              <pre id="artifactDetail" class="code-panel artifact-panel"></pre>
+            </section>
+
+            <section class="assistant-view" data-view-panel="trace">
+              <div class="trace-rail" id="traceRail"></div>
+              <pre id="tracePayload" class="code-panel trace-panel"></pre>
+            </section>
+          </div>
+
+          <div class="composer-shell">
+            <textarea id="taskPrompt" placeholder="Plan, @ for context, / for commands"></textarea>
+            <div class="composer-actions">
+              <span class="subtle" id="statusText">Ready.</span>
+              <button class="primary-btn" id="runTaskButton">Run Task</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="statusbar">
+        <div id="statusLeft">Agent Universe Workbench</div>
+        <div class="status-right">
+          <span id="fileCountStatus">0 files</span>
+          <span id="taskCountStatus">0 tasks</span>
+          <span id="chatCountStatus">0 chats</span>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <script src="/static/workbench.js"></script>
+</body>
+</html>
