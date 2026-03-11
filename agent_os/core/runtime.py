@@ -47,9 +47,9 @@ class AgentRuntime:
 
         self.policy = PermissionPolicy(repo_path=self.repo_path)
         self.shell = SafeShell(repo_path=self.repo_path, policy=self.policy)
-        self.fast_provider = get_provider("gemini_flash")
-        self.strong_provider = get_provider("deepseek_reasoner")
-        self.final_provider = get_provider("deepseek_chat")
+        self.fast_provider = get_provider("sub2api_fast")
+        self.strong_provider = get_provider("sub2api_strong")
+        self.final_provider = get_provider("sub2api_final")
 
         planner_provider = self.strong_provider if self.strong_provider.is_available() else self.fast_provider
         reviewer_provider = planner_provider
@@ -311,3 +311,4 @@ class AgentRuntime:
             )
         finally:
             self._event_hook = None
+

@@ -27,3 +27,27 @@ pytest-cache-files-*/
 openclaw-main/
 vscode-main/
 
+
+# Reference repositories and large reference docs
+gemini-cli-main/
+claude-code-web.md
+claudecodeui.md
+codex.md
+gemini-cli.md
+
+# Generated/local runtime artifacts
+data/agent_os.db
+data/local_ws_test/
+data/runs/
+data/mock_agent_output.py
+patch.txt
+patch_test_tmp.txt
+.pytest_local_tmp/
+tests/.tmp_server_tools/
+
+# VS Code sidebar local build artifacts
+vscode-agent-sidebar/node_modules/
+vscode-agent-sidebar/.npm-cache/
+vscode-agent-sidebar/dist/
+vscode-agent-sidebar/webview-dist/
+vscode-agent-sidebar/.vscode/

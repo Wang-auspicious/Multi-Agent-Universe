@@ -1,0 +1,87 @@
+{
+  "name": "agent-sidebar",
+  "displayName": "Agent Sidebar",
+  "description": "VS Code sidebar for the local headless agent brain",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.103.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:agentSidebar.chatView",
+    "onCommand:agentSidebar.focus"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentSidebar.focus",
+        "title": "Agent: Focus Sidebar",
+        "category": "Agent"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentSidebar",
+          "title": "Agent",
+          "icon": "media/agent.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentSidebar": [
+        {
+          "type": "webview",
+          "id": "agentSidebar.chatView",
+          "name": "Assistant"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "npm run check-types && npm run check-types:webview && npm run lint && npm run build:webview && node esbuild.js",
+    "build:webview": "vite build --config webview/vite.config.ts",
+    "watch:webview": "vite build --watch --config webview/vite.config.ts",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "dev": "npm-run-all -p watch:tsc watch:esbuild watch:webview",
+    "package": "npm run build",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run build && npm run compile-tests",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "check-types:webview": "tsc --noEmit -p webview/tsconfig.json",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@types/vscode": "^1.103.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.27.3",
+    "eslint": "^9.39.3",
+    "npm-run-all": "^4.1.5",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vite": "^7.1.7"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

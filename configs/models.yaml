@@ -1,5 +1,5 @@
 ﻿[default]
-router = "gemini_flash"
-coder = "gemini_flash"
-reviewer = "gemini_flash"
-summarizer = "gemini_flash"
+router = "sub2api_strong"
+coder = "sub2api_fast"
+reviewer = "sub2api_strong"
+summarizer = "sub2api_final"

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import difflib
 import fnmatch
@@ -199,6 +199,22 @@ def patch_file(path: Path, find: str, replace: str, policy: PermissionPolicy, co
             stdout += f"\npatch_id={history_id}"
         if diff:
             stdout += f"\n{diff}"
+        return ToolResult(True, stdout, "", 0, [str(path)], 0)
+    except Exception as exc:
+        return ToolResult(False, "", str(exc), 1, [], 0)
+
+
+def delete_file(path: Path, policy: PermissionPolicy) -> ToolResult:
+    ok, reason = policy.validate_path(path)
+    if not ok:
+        return ToolResult(False, "", reason, 1, [], 0)
+    try:
+        if not path.exists() or not path.is_file():
+            return ToolResult(False, "", f"File not found: {path.name}", 1, [], 0)
+        before = path.read_text(encoding="utf-8-sig")
+        _record_patch_history(path, before, "", "delete", policy)
+        path.unlink()
+        stdout = f"deleted {path.name}"
         return ToolResult(True, stdout, "", 0, [str(path)], 0)
     except Exception as exc:
         return ToolResult(False, "", str(exc), 1, [], 0)

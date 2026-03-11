@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -16,10 +16,12 @@ from flask import Flask, Response, jsonify, request
 from agent_os.core.runtime import AgentRuntime
 from agent_os.memory.store import MemoryStore
 from agent_os.tools.permissions import PermissionPolicy
+from agent_os.tools.shell import SafeShell
 from agent_os.tools.files import (
     IGNORED_DIRS,
     IGNORED_PREFIXES,
     TEXT_SKIP_SUFFIXES,
+    delete_file,
     patch_file,
     patch_history,
     read_file,
@@ -33,6 +35,8 @@ EXECUTORS = ("collab_agent", "local_agent", "shell", "codex_cli", "gemini_cli", 
 MAX_FILE_LIST = 2200
 STATIC_DIR = Path(__file__).with_name("workbench_static")
 INDEX_PATH = STATIC_DIR / "index.html"
+CSS_PATH = STATIC_DIR / "workbench.css"
+JS_PATH = STATIC_DIR / "workbench.js"
 
 
 def format_timestamp(value: str) -> str:
@@ -190,6 +194,7 @@ def create_app(repo_path: Path) -> Flask:
     runtime_ref: dict[str, AgentRuntime | None] = {"value": None}
     store = MemoryStore(repo_path / "data" / "agent_os.db")
     policy = PermissionPolicy(repo_path=repo_path)
+    shell = SafeShell(repo_path=repo_path, policy=policy)
     live_tasks: dict[str, dict[str, object]] = {}
     live_lock = threading.Lock()
 
@@ -295,7 +300,12 @@ def create_app(repo_path: Path) -> Flask:
 
     @app.get("/")
     def index() -> Response:
-        return Response(INDEX_PATH.read_text(encoding="utf-8"), mimetype="text/html")
+        html = INDEX_PATH.read_text(encoding="utf-8")
+        css = CSS_PATH.read_text(encoding="utf-8")
+        js = JS_PATH.read_text(encoding="utf-8")
+        html = html.replace("<link rel=\"stylesheet\" href=\"/static/workbench.css\">", f"<style>{css}</style>")
+        html = html.replace("<script src=\"/static/workbench.js\"></script>", f"<script>{js}</script>")
+        return Response(html, mimetype="text/html")
 
     @app.get("/api/bootstrap")
     def bootstrap() -> Response:
@@ -366,6 +376,24 @@ def create_app(repo_path: Path) -> Flask:
         path = request.args.get("path", "").strip()
         return jsonify({"history": patch_history(repo_path / path, policy, limit=24)})
 
+    @app.post("/api/terminal/run")
+    def terminal_run() -> Response:
+        payload = request.get_json(force=True) or {}
+        command = str(payload.get("command", "")).strip()
+        if not command:
+            return jsonify({"ok": False, "error": "Command is required."}), 400
+        result = shell.run(command)
+        return jsonify(
+            {
+                "ok": result.ok,
+                "command": command,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.exit_code,
+                "duration_ms": result.duration_ms,
+            }
+        )
+
     @app.post("/api/file/rollback")
     def file_rollback() -> Response:
         payload = request.get_json(force=True) or {}
@@ -379,6 +407,22 @@ def create_app(repo_path: Path) -> Flask:
             "content": current.stdout if current.ok else "",
             "history": patch_history(repo_path / path, policy, limit=24),
         })
+
+    @app.post("/api/file/delete")
+    def file_delete() -> Response:
+        payload = request.get_json(force=True) or {}
+        path = str(payload.get("path", "")).strip()
+        confirmed = bool(payload.get("confirm", False))
+        if not path:
+            return jsonify({"ok": False, "error": "Path is required."}), 400
+        if not confirmed:
+            return jsonify({"ok": False, "error": "Confirmation is required for delete."}), 400
+        candidate = repo_path / path
+        parts = candidate.relative_to(repo_path).parts
+        if parts and parts[0] in REFERENCE_ARCHIVES:
+            return jsonify({"ok": False, "error": "Reference archives are read-only and cannot be deleted."}), 400
+        result = delete_file(candidate, policy)
+        return jsonify({"ok": result.ok, "error": result.stderr})
 
     @app.get("/api/chats")
     def chats() -> Response:
@@ -455,6 +499,7 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

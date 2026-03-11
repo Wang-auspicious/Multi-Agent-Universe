@@ -199,13 +199,19 @@ class CollaborativeExecutor(ExecutorBase):
         )
 
     def _build_role_prompt(self, board: CollaborationBoard, item: WorkItem, history: list[dict[str, object]]) -> str:
+        ready_items = [ready.as_dict() for ready in board.ready_items() if ready.item_id != item.item_id]
+        inbox = board.inbox_for(item.owner)
         return (
             f"Board context:\n{json.dumps(board.as_context(), ensure_ascii=False, indent=2)}\n\n"
             f"Current work item:\n{json.dumps(item.as_dict(), ensure_ascii=False, indent=2)}\n\n"
             f"Current tool history:\n{json.dumps(history, ensure_ascii=False, indent=2)}\n\n"
+            f"Ready teammate work items:\n{json.dumps(ready_items, ensure_ascii=False, indent=2)}\n\n"
+            f"Mailbox for this role:\n{json.dumps(inbox, ensure_ascii=False, indent=2)}\n\n"
+            "You are part of a shared agent team. The planner is the team lead.\n"
             "You must return JSON only.\n"
-            "Do not repeat the same exploration if repo_overview or prior history already answers it.\n"
+            "Do not repeat exploration if repo_overview, notes, mailbox, or prior history already answers it.\n"
             "Do not claim files were updated unless a write_file/apply_patch/rollback_patch tool result succeeded in this task.\n"
+            "If you discover something another teammate needs, you may send a mailbox message.\n"
             "Tool schemas:\n"
             "- read_file: {\"path\": \"relative/path\"}\n"
             "- write_file: {\"path\": \"relative/path\", \"content\": \"...\"}\n"
@@ -215,7 +221,8 @@ class CollaborativeExecutor(ExecutorBase):
             "- search_code: {\"query\": \"text\", \"limit\": 12}\n"
             "- run_command: {\"command\": \"pytest -q\", \"timeout_s\": 60}\n"
             "If you need a tool, return {\"mode\":\"tool\",\"tool\":\"tool_name\",\"args\":{...},\"reason\":\"short\"}.\n"
-            "If the work item is complete, return {\"mode\":\"final\",\"answer\":\"direct answer for this work item\"}.\n"
+            "If you need to update another teammate, return {\"mode\":\"message\",\"recipient\":\"planner|coder|writer|reviewer|all\",\"content\":\"short note\"}.\n"
+            "If the work item is complete, return {\"mode\":\"final\",\"answer\":\"direct answer for this work item\",\"message\":\"optional note to planner\"}.\n"
         )
 
     def _artifact_diff_blocks(self) -> list[dict[str, object]]:
@@ -243,6 +250,8 @@ class CollaborativeExecutor(ExecutorBase):
         final_answer = ""
         ok = True
         provider = self._provider_for_role(role)
+        board.claim_item(item.item_id, role)
+        board.send_message("planner", role, f"You own work item: {item.title}", item.item_id)
 
         for _ in range(self.max_steps):
             prompt = self._build_role_prompt(board, item, history)
@@ -253,8 +262,32 @@ class CollaborativeExecutor(ExecutorBase):
                 ok = False
                 break
 
+            if payload.get("mode") == "message":
+                recipient = str(payload.get("recipient", "planner")).strip() or "planner"
+                content = str(payload.get("content", "")).strip()
+                if content:
+                    board.send_message(role, recipient, content, item.item_id)
+                    self._append_artifact({
+                        "kind": "mailbox_message",
+                        "role": role,
+                        "item_id": item.item_id,
+                        "recipient": recipient,
+                        "content": content,
+                    })
+                continue
+
             if payload.get("mode") == "final":
                 final_answer = str(payload.get("answer", "")).strip()
+                lead_message = str(payload.get("message", "")).strip()
+                if lead_message:
+                    board.send_message(role, "planner", lead_message, item.item_id)
+                    self._append_artifact({
+                        "kind": "mailbox_message",
+                        "role": role,
+                        "item_id": item.item_id,
+                        "recipient": "planner",
+                        "content": lead_message,
+                    })
                 break
 
             if payload.get("mode") == "tool":
@@ -271,6 +304,7 @@ class CollaborativeExecutor(ExecutorBase):
             last = history[-1]["result"]
             final_answer = str(last.get("stdout") or last.get("stderr") or "Work item finished.")
 
+        board.send_message(role, "planner", final_answer[:400], item.item_id)
         return ok, final_answer or "Work item finished.", history
 
     def _review_json(self, board: CollaborationBoard, item: WorkItem) -> dict[str, object]:
@@ -289,6 +323,7 @@ class CollaborativeExecutor(ExecutorBase):
             f"User goal: {board.goal}\n"
             f"Recent conversation: {json.dumps(board.conversation_history[-8:], ensure_ascii=False, indent=2)}\n"
             f"Completed work: {json.dumps(completed, ensure_ascii=False, indent=2)}\n"
+            f"Mailbox: {json.dumps(board.as_context().get('mailbox', []), ensure_ascii=False, indent=2)}\n"
             f"Verified artifacts: {json.dumps(verified_artifacts, ensure_ascii=False, indent=2)}\n"
             f"Artifact diffs: {json.dumps(diff_blocks, ensure_ascii=False, indent=2)}\n"
             f"Git diff snapshot:\n{git_diff or '(empty)'}"
@@ -371,9 +406,11 @@ class CollaborativeExecutor(ExecutorBase):
 
     def _execute_non_review_items(self, board: CollaborationBoard) -> bool:
         ok = True
-        for item in board.items:
-            if item.owner == "reviewer" or item.status in {"done", "blocked"}:
-                continue
+        while True:
+            ready = board.ready_items()
+            if not ready:
+                break
+            item = ready[0]
             item.status = "running"
             self._append_artifact({
                 "kind": "work_item_started",
@@ -381,6 +418,7 @@ class CollaborativeExecutor(ExecutorBase):
                 "item_id": item.item_id,
                 "title": item.title,
                 "goal": item.goal,
+                "depends_on": list(item.depends_on),
             })
             item_ok, result_text, history = self._run_role_loop(board, item)
             item.status = "done" if item_ok else "blocked"
@@ -415,8 +453,10 @@ class CollaborativeExecutor(ExecutorBase):
             "role": "planner",
             "state": state.value,
             "summary": board.plan_summary,
+            "plan_status": board.plan_status,
             "items": [item.as_dict() for item in board.items],
             "repo_overview": board.repo_overview,
+            "mailbox": board.as_context().get("mailbox", []),
         })
 
         repair_count = 0
@@ -446,6 +486,7 @@ class CollaborativeExecutor(ExecutorBase):
             reviewer_item.status = "done" if approved else "blocked"
             reviewer_item.result = reviewer_answer
             board.add_note("reviewer", reviewer_answer[:1200])
+            board.send_message("reviewer", "planner", reviewer_answer[:400], reviewer_item.item_id)
             self._append_artifact({
                 "kind": "work_item_completed",
                 "role": "reviewer",
@@ -466,6 +507,8 @@ class CollaborativeExecutor(ExecutorBase):
                 owner="coder",
                 goal=repair_goal or f"Address reviewer feedback: {reviewer_answer}",
                 kind="repair",
+                depends_on=[reviewer_item.item_id],
+                priority=1,
             )
             board.add_item(repair_item)
             overall_ok = self._execute_non_review_items(board) and overall_ok
@@ -485,3 +528,9 @@ class CollaborativeExecutor(ExecutorBase):
 
     def get_artifacts(self) -> list[dict[str, object]]:
         return list(self._artifacts)
+
+
+
+
+
+
