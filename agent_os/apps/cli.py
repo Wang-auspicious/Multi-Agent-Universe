@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 from agent_os.core.runtime import AgentRuntime
 
@@ -61,32 +62,99 @@ def _choose_executor(runtime: AgentRuntime) -> str:
     return _EXECUTORS[idx - 1]
 
 
+def _check_incomplete_tasks(runtime: AgentRuntime) -> str | None:
+    """Check for incomplete tasks and ask user if they want to resume."""
+    incomplete = runtime.store.list_task_checkpoints(limit=5, statuses=["in_progress", "pending"])
+    if not incomplete:
+        return None
+
+    print("\n⚠️  Detected incomplete tasks:")
+    for i, task in enumerate(incomplete, start=1):
+        print(f"{i}. [{task['status']}] {task['goal'][:60]}... (task_id: {task['task_id'][:8]})")
+
+    choice = input("\nResume a task? Enter number (1-5) or press Enter to start fresh: ").strip()
+    if not choice:
+        return None
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(incomplete):
+            return incomplete[idx]["task_id"]
+    except ValueError:
+        pass
+
+    return None
+
+
 def _chat_loop(runtime: AgentRuntime, executor: str, strict: bool) -> None:
     print(f"Chat mode started. executor={executor}, strict={strict}")
     print("Type 'exit' to quit.")
-    conversation_history: list[dict[str, str]] = []
+
+    # Generate or reuse chat_id for session persistence
+    chat_id = f"cli_{uuid4().hex[:12]}"
+
+    # Check for incomplete tasks
+    resume_task_id = _check_incomplete_tasks(runtime)
+    if resume_task_id:
+        checkpoint = runtime.store.get_task_checkpoint(resume_task_id)
+        if checkpoint:
+            print(f"\n✓ Resuming task: {checkpoint['goal']}")
+            conversation_history = checkpoint.get("conversation", [])
+            chat_id = checkpoint.get("chat_id", chat_id)
+            print(f"Loaded {len(conversation_history)} previous messages.\n")
+        else:
+            conversation_history = []
+    else:
+        # Load last 10 messages from most recent chat
+        recent_chats = runtime.store.list_chats(limit=1)
+        if recent_chats:
+            last_chat_id = recent_chats[0]["chat_id"]
+            conversation_history = runtime.store.get_last_n_messages(last_chat_id, n=10)
+            if conversation_history:
+                print(f"\n✓ Loaded {len(conversation_history)} messages from previous session.\n")
+        else:
+            conversation_history = []
+
     while True:
         prompt = input("\nYou> ").strip()
         if not prompt:
             continue
         if prompt.lower() in {"exit", "quit"}:
             break
+
+        # Persist user message
+        runtime.store.append_chat_message(chat_id, "user", prompt)
+
         if _should_quick_reply(prompt):
             reply = _quick_reply(prompt)
             conversation_history.append({"role": "user", "content": prompt})
             conversation_history.append({"role": "assistant", "content": reply})
+            runtime.store.append_chat_message(chat_id, "assistant", reply)
             print("\nAssistant>")
             print(reply)
             continue
+
         result = runtime.run_task(
             goal=prompt,
             constraints=[],
             executor_override=executor,
             fallback_to_shell=not strict,
             conversation_history=conversation_history,
+            chat_id=chat_id,
         )
         conversation_history.append({"role": "user", "content": prompt})
         conversation_history.append({"role": "assistant", "content": result.summary})
+
+        # Persist assistant response
+        runtime.store.append_chat_message(
+            chat_id,
+            "assistant",
+            result.summary,
+            task_id=result.task_id,
+            status=result.status,
+            executor=result.executor,
+        )
+
         print("\nAssistant>")
         _print_result(result)
 

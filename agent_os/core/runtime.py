@@ -170,6 +170,7 @@ class AgentRuntime:
         fallback_to_shell: bool = True,
         conversation_history: list[dict[str, str]] | None = None,
         task_id: str | None = None,
+        chat_id: str | None = None,
     ) -> RunResult:
         task = Task(
             repo_path=self.repo_path,
@@ -183,6 +184,19 @@ class AgentRuntime:
 
         try:
             self._emit(EventTypes.TASK_CREATED, task, {"goal": goal})
+
+            # Save initial checkpoint with chat_id
+            if chat_id:
+                self.store.upsert_task_checkpoint(
+                    task_id=task.task_id,
+                    chat_id=chat_id,
+                    goal=goal,
+                    executor=executor_override or "collab_agent",
+                    status="pending",
+                    conversation=conversation_history or [],
+                    logs=[],
+                )
+
             ensure_transition(task.status, TaskStatus.RUNNING)
             task.status = TaskStatus.RUNNING
             task.touch()
@@ -197,6 +211,18 @@ class AgentRuntime:
                 cost_usd=0.0,
                 assigned_executor="",
             )
+
+            # Update checkpoint to in_progress
+            if chat_id:
+                self.store.upsert_task_checkpoint(
+                    task_id=task.task_id,
+                    chat_id=chat_id,
+                    goal=goal,
+                    executor=executor_override or "collab_agent",
+                    status="in_progress",
+                    conversation=conversation_history or [],
+                    logs=[],
+                )
 
             route = self.router.decide(goal)
             requested_executor = executor_override or route.executor
@@ -297,6 +323,19 @@ class AgentRuntime:
                 task,
                 {"status": task.status.value, "tokens": task.cost_tokens, "cost_usd": cost_usd, "executor": selected_executor},
             )
+
+            # Update checkpoint to completed
+            if chat_id:
+                self.store.upsert_task_checkpoint(
+                    task_id=task.task_id,
+                    chat_id=chat_id,
+                    goal=goal,
+                    executor=selected_executor,
+                    status="completed",
+                    summary=summary,
+                    conversation=conversation_history or [],
+                    logs=[],
+                )
 
             return RunResult(
                 task_id=task.task_id,

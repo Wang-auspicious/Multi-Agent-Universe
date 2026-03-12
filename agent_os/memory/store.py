@@ -376,6 +376,22 @@ class MemoryStore:
         clean = " ".join(content.split()).strip()
         return (clean[:56] + "...") if len(clean) > 56 else (clean or "New chat")
 
+    def get_last_n_messages(self, chat_id: str, n: int = 10) -> list[dict[str, str]]:
+        """Get last N messages in conversation history format for LLM context."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT role, content
+                FROM chat_messages
+                WHERE chat_id=?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (chat_id, n),
+            ).fetchall()
+        messages = [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
+        return messages
+
     def messages_for_chat(self, chat_id: str, limit: int | None = None) -> list[dict[str, object]]:
         sql = """
             SELECT chat_id, role, content, task_id, status, executor, logs_json, artifacts_json, created_at
