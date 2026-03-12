@@ -65,6 +65,8 @@ class MemoryStore:
                     failure TEXT NOT NULL,
                     fix_attempt TEXT,
                     status TEXT,
+                    error_type TEXT DEFAULT 'unknown',
+                    retry_count INTEGER DEFAULT 0,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );
 
@@ -112,6 +114,13 @@ class MemoryStore:
                 self._safe_add_column(conn, "ALTER TABLE tasks ADD COLUMN cost_usd REAL DEFAULT 0")
             if "assigned_executor" not in cols:
                 self._safe_add_column(conn, "ALTER TABLE tasks ADD COLUMN assigned_executor TEXT DEFAULT ''")
+
+            # Add error_type and retry_count to failure_memory if missing
+            failure_cols = {r["name"] for r in conn.execute("PRAGMA table_info(failure_memory)").fetchall()}
+            if "error_type" not in failure_cols:
+                self._safe_add_column(conn, "ALTER TABLE failure_memory ADD COLUMN error_type TEXT DEFAULT 'unknown'")
+            if "retry_count" not in failure_cols:
+                self._safe_add_column(conn, "ALTER TABLE failure_memory ADD COLUMN retry_count INTEGER DEFAULT 0")
 
     def upsert_task(
         self,
@@ -265,11 +274,11 @@ class MemoryStore:
                 (key, value),
             )
 
-    def add_failure(self, task_id: str, failure: str, fix_attempt: str, status: str) -> None:
+    def add_failure(self, task_id: str, failure: str, fix_attempt: str, status: str, error_type: str = "unknown", retry_count: int = 0) -> None:
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO failure_memory(task_id, failure, fix_attempt, status) VALUES(?,?,?,?)",
-                (task_id, failure, fix_attempt, status),
+                "INSERT INTO failure_memory(task_id, failure, fix_attempt, status, error_type, retry_count) VALUES(?,?,?,?,?,?)",
+                (task_id, failure, fix_attempt, status, error_type, retry_count),
             )
 
     def recent_tasks(self, limit: int = 20) -> list[dict[str, object]]:

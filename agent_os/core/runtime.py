@@ -2,12 +2,14 @@
 
 import json
 import re
+import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from agent_os.agents import CoderAgent, ReviewerAgent, RouterAgent, SummarizerAgent
 from agent_os.core.bus import EventBus
+from agent_os.core.error_classifier import classify_error, should_retry, get_backoff_delay
 from agent_os.core.events import Event, EventTypes
 from agent_os.core.models import Artifact, Task, TaskStatus
 from agent_os.core.state_machine import ensure_transition
@@ -33,7 +35,7 @@ class RunResult:
 
 
 class AgentRuntime:
-    def __init__(self, repo_path: Path, retry_limit: int = 1) -> None:
+    def __init__(self, repo_path: Path, retry_limit: int = 3) -> None:
         self.repo_path = repo_path.resolve()
         self.data_dir = self.repo_path / "data"
         self.runs_dir = self.data_dir / "runs"
@@ -280,10 +282,56 @@ class AgentRuntime:
 
             if not review["approved"]:
                 self._emit(EventTypes.REVIEW_FAILED, task, review)
-                self.failure_memory.add(task.task_id, str(review["feedback"]), "review failed", "open")
-                ensure_transition(task.status, TaskStatus.BLOCKED)
-                task.status = TaskStatus.BLOCKED
-                task.touch()
+
+                # Classify the error
+                feedback = str(review["feedback"])
+                classification = classify_error(feedback)
+
+                # Determine retry strategy
+                retry_count = len([a for a in task.artifacts if a.kind == "retry_attempt"])
+                can_retry = should_retry(classification, retry_count, max_retries=self.retry_limit)
+
+                # Record failure with classification
+                self.failure_memory.add(
+                    task.task_id,
+                    feedback,
+                    f"review failed - {classification.suggested_strategy}",
+                    "retrying" if can_retry else "blocked",
+                    error_type=classification.error_type,
+                    retry_count=retry_count
+                )
+
+                if can_retry:
+                    # Apply exponential backoff
+                    delay = get_backoff_delay(retry_count)
+                    if delay > 0:
+                        time.sleep(delay)
+
+                    # Add retry artifact
+                    task.artifacts.append(Artifact(
+                        kind="retry_attempt",
+                        content=json.dumps({
+                            "retry_count": retry_count + 1,
+                            "error_type": classification.error_type,
+                            "strategy": classification.suggested_strategy,
+                            "backoff_delay": delay
+                        }, ensure_ascii=False)
+                    ))
+
+                    # Retry with enhanced context
+                    enhanced_goal = f"{goal}\n\nPrevious attempt failed with {classification.error_type}. Strategy: {classification.suggested_strategy}. Feedback: {feedback[:200]}"
+                    coder_output = self._run_coder_once(task, selected_executor, enhanced_goal)
+
+                    # Re-review after retry
+                    review = self.reviewer.review(coder_output)
+                    if not review["approved"]:
+                        ensure_transition(task.status, TaskStatus.BLOCKED)
+                        task.status = TaskStatus.BLOCKED
+                        task.touch()
+                else:
+                    ensure_transition(task.status, TaskStatus.BLOCKED)
+                    task.status = TaskStatus.BLOCKED
+                    task.touch()
 
             self._emit(EventTypes.AGENT_STARTED, task, {"agent": "summarizer"})
             summary, tokens = self.summarizer.summarize(task.goal, coder_output, review)

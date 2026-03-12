@@ -144,7 +144,26 @@ class CollaborativeExecutor(ExecutorBase):
         if tool in {"write_file", "write_to_file"}:
             return self._tool_result(role, item_id, "write_file", write_file(self.repo_path / str(args.get("path", "")), str(args.get("content", "")), self.policy))
         if tool in {"apply_patch", "patch_file"}:
-            return self._tool_result(role, item_id, "apply_patch", patch_file(self.repo_path / str(args.get("path", "")), str(args.get("find", "")), str(args.get("replace", "")), self.policy, count=int(args.get("count", 1))))
+            result = patch_file(self.repo_path / str(args.get("path", "")), str(args.get("find", "")), str(args.get("replace", "")), self.policy, count=int(args.get("count", 1)))
+
+            # Fallback: if patch fails, try reading the file and rewriting it
+            if not result.ok and "not found" in result.stderr.lower():
+                file_path = self.repo_path / str(args.get("path", ""))
+                if file_path.exists():
+                    try:
+                        content = file_path.read_text(encoding="utf-8-sig")
+                        find_text = str(args.get("find", ""))
+                        replace_text = str(args.get("replace", ""))
+
+                        # Try to apply the replacement manually
+                        if find_text in content:
+                            new_content = content.replace(find_text, replace_text, int(args.get("count", 1)))
+                            result = write_file(file_path, new_content, self.policy)
+                            result.stderr = f"[Fallback] patch failed, used write_file instead. {result.stderr}"
+                    except Exception as e:
+                        result.stderr = f"{result.stderr}\n[Fallback failed] {str(e)}"
+
+            return self._tool_result(role, item_id, "apply_patch", result)
         if tool == "patch_history":
             rows = patch_history(self.repo_path / str(args.get("path", "")), self.policy, limit=int(args.get("limit", 20)))
             return self._tool_result(role, item_id, tool, self._simple_tool_result(json.dumps(rows, ensure_ascii=False, indent=2), str(args.get("path", ""))))
