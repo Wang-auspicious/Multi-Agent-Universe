@@ -280,36 +280,41 @@ export function ChatPanel(): React.ReactElement {
         )}
       </div>
 
-      <footer className="border-t border-[var(--vscode-panel-border)] bg-[var(--vscode-editor-background)] px-4 py-4">
-        <form className="space-y-3" onSubmit={handleSubmit}>
-          <textarea
-            className="min-h-[104px] w-full resize-none rounded-xl border px-3 py-3 text-sm leading-6 outline-none transition focus:ring-1"
-            style={{
-              borderColor: 'var(--vscode-input-border, var(--vscode-panel-border))',
-              backgroundColor: 'var(--vscode-input-background)',
-              color: 'var(--vscode-input-foreground)',
-              boxShadow: 'none',
-            }}
-            placeholder="Ask the local agent brain to work. Only the final answer will come back here."
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-[var(--vscode-descriptionForeground)]">
-              {isConnected ? 'Connected to ws://127.0.0.1:8765/ws' : `Socket retry attempt ${retryCount}`}
-            </p>
-            <button
-              type="submit"
-              disabled={!draft.trim() || !isConnected}
-              className="rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60"
+      <footer className="border-t border-[var(--vscode-panel-border)] bg-[var(--vscode-sideBar-background)] px-4 py-4">
+        <form className="mx-auto max-w-3xl space-y-3" onSubmit={handleSubmit}>
+          <div className="relative overflow-hidden rounded-xl border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] transition-all focus-within:ring-1 focus-within:ring-[var(--vscode-focusBorder)]">
+            <textarea
+              className="min-h-[104px] w-full resize-none bg-transparent px-4 py-3 text-sm leading-6 outline-none"
               style={{
-                backgroundColor: 'var(--vscode-button-background)',
-                color: 'var(--vscode-button-foreground)',
+                color: 'var(--vscode-input-foreground)',
+                boxShadow: 'none',
               }}
-            >
-              Send
-            </button>
+              placeholder="Ask the local agent brain to work. Only the final answer will come back here."
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e as any);
+                }
+              }}
+            />
+            <div className="flex items-center justify-between border-t border-[var(--vscode-panel-border)] bg-[rgba(0,0,0,0.05)] px-4 py-2">
+              <p className="text-[10px] text-[var(--vscode-descriptionForeground)] opacity-70">
+                {isConnected ? 'Connected to ws://127.0.0.1:8765/ws' : `Socket retry attempt ${retryCount}`}
+              </p>
+              <button
+                type="submit"
+                disabled={!draft.trim() || !isConnected}
+                className="rounded-md px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  backgroundColor: 'var(--vscode-button-background)',
+                  color: 'var(--vscode-button-foreground)',
+                }}
+              >
+                Send
+              </button>
+            </div>
           </div>
         </form>
       </footer>

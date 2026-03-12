@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -type f -name \"*.py\" | grep -v node_modules | grep -v __pycache__ | grep -v \".git/\" | grep -v openclaw-main | grep -v vscode-agent-sidebar | grep -v Star-Office | xargs wc -l 2>/dev/null | tail -1)",
+      "Bash(git add:*)"
+    ]
+  }
+}

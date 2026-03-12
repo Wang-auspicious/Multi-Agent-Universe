@@ -32,21 +32,27 @@ PERMISSION_TIMEOUT_SECONDS = 300
 CODEX_CONFIG_PATH = Path.home() / ".codex" / "config.toml"
 CODEX_AUTH_PATH = Path.home() / ".codex" / "auth.json"
 SHELL_POLICY = PermissionPolicy(repo_path=WORKSPACE_ROOT)
-SYSTEM_PROMPT = """You are the backend brain for a coding assistant workspace.
+SYSTEM_PROMPT = """You are an AI assistant in a specialized CLI environment, based on the Gemini CLI architecture.
 
-Use tools when they help you inspect the workspace. Prefer the read-only
-list_directory tool for understanding folder structure, and use the read-only
-run_command tool for counting files, listing files, searching text, checking
-status, or other background inspection tasks. Do not create helper scripts or
-write files just to compute an answer that can be obtained with a read-only
-tool.
+# Core Mandates:
+- **Concise & Direct:** Adopt a professional, direct, and concise tone. Avoid conversational filler and apologies.
+- **High-Signal Output:** Focus exclusively on intent and technical rationale.
+- **Context Efficiency:** Minimize unnecessary context usage.
+- **Technical Integrity:** Prioritize readability and long-term maintainability. Align strictly with the requested architectural direction.
+- **Engineering Standards:** Follow local conventions, architectural patterns, and style (naming, formatting).
 
-Only call write_file when an actual file creation or modification is necessary.
-When you need to write a file you must call the write_file tool instead of
-pretending the file was written.
+# Operational Rules:
+- Use tools like `grep_search` and `list_directory` extensively to understand the codebase.
+- Prefer `replace` for surgical edits over `write_file` for large files.
+- Before making manual code changes, check if ecosystem tools (like 'eslint --fix', 'prettier --write') are available.
+- Fulfill requests thoroughly, including adding tests.
+- Do not provide summaries unless asked.
 
-Keep the user updated as you work. When tool output indicates approval was
-denied or timed out, continue and explain what happened.
+# Execution Workflow:
+Operate using a **Research -> Strategy -> Execution** lifecycle.
+1. **Research:** Map the codebase and validate assumptions.
+2. **Strategy:** Share a concise summary of your plan.
+3. **Execution:** Apply targeted changes and validate them.
 """
 DEFAULT_TOOL_TIMEOUT_SECONDS = 30
 DEFAULT_DIRECTORY_LIST_LIMIT = 200
@@ -156,12 +162,216 @@ WRITE_FILE_TOOL: dict[str, Any] = {
         },
     },
 }
-REGISTERED_TOOLS: list[dict[str, Any]] = [RUN_COMMAND_TOOL, LIST_DIRECTORY_TOOL, WRITE_FILE_TOOL]
 
+READ_FILE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "read_file",
+        "description": "Reads the content of a file. Supports reading specific line ranges for large files.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "The path to the file to read."},
+                "start_line": {"type": "integer", "description": "Optional: The 1-based line number to start reading from.", "minimum": 1},
+                "end_line": {"type": "integer", "description": "Optional: The 1-based line number to end reading at (inclusive)."},
+            },
+            "required": ["file_path"],
+        },
+    },
+}
+
+GREP_SEARCH_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "grep_search",
+        "description": "Searches for a pattern within file contents, similar to ripgrep. Optimized for speed.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "The regular expression pattern to search for."},
+                "include_pattern": {"type": "string", "description": "Optional: Glob pattern to filter files (e.g., '*.ts')."},
+                "dir_path": {"type": "string", "description": "Optional: Directory to search in. Defaults to workspace root."},
+                "context": {"type": "integer", "description": "Optional: Number of lines of context to show around each match.", "default": 0},
+            },
+            "required": ["pattern"],
+        },
+    },
+}
+
+REPLACE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "replace",
+        "description": "Replaces text within a file using exact string matching. Best for surgical edits. Requires providing significant context in old_string to ensure uniqueness.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "The path to the file to modify."},
+                "old_string": {"type": "string", "description": "The exact literal text to find and replace. Must be unique in the file unless allow_multiple is true."},
+                "new_string": {"type": "string", "description": "The text to replace old_string with."},
+                "allow_multiple": {"type": "boolean", "description": "If true, replaces all occurrences. If false, fails if old_string is not unique.", "default": False},
+                "reason": {"type": "string", "description": "Short explanation of why this change is needed."},
+            },
+            "required": ["file_path", "old_string", "new_string"],
+        },
+    },
+}
+
+GLOB_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "glob",
+        "description": "Finds files matching specific glob patterns (e.g., 'src/**/*.ts', 'docs/*.md').",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "The glob pattern to match against (e.g., '**/*.py')."},
+                "dir_path": {"type": "string", "description": "Optional: The directory to search within. Defaults to root."},
+                "include_hidden": {"type": "boolean", "description": "Whether to search hidden files.", "default": False},
+            },
+            "required": ["pattern"],
+        },
+    },
+}
+
+READ_MANY_FILES_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "read_many_files",
+        "description": "Reads the content of multiple files at once. Optimized for quick context gathering.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of file paths to read.",
+                },
+            },
+            "required": ["file_paths"],
+        },
+    },
+}
+
+ASK_USER_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "ask_user",
+        "description": "Ask the user a question and wait for a text response. Use this when you need clarification, more information, or to make a decision that requires human input.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "description": "The question to ask the user."},
+            },
+            "required": ["question"],
+        },
+    },
+}
+
+WEB_FETCH_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "web_fetch",
+        "description": "Fetches and extracts text from a URL. Useful for reading documentation or raw code from the internet. Only supports HTTP/HTTPS.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "The URL to fetch."},
+                "instructions": {"type": "string", "description": "Optional instructions on what to extract from the page."},
+            },
+            "required": ["url"],
+        },
+    },
+}
+
+SAVE_MEMORY_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "save_memory",
+        "description": "Persists global user preferences or facts across all future sessions. Use this for recurring instructions like coding styles. Do not use for local project context.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "fact": {"type": "string", "description": "A concise, global fact or preference to remember (e.g., 'User prefers tabs')."},
+            },
+            "required": ["fact"],
+        },
+    },
+}
+
+WRITE_TODOS_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "write_todos",
+        "description": "Writes or updates a TODO.md file in the workspace to track complex, multi-step tasks. Helps maintain focus over long contexts.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "The full markdown content of the TODO list."},
+            },
+            "required": ["content"],
+        },
+    },
+}
+
+ACTIVATE_SKILL_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "activate_skill",
+        "description": "Activates a specialized agent skill by name (e.g., 'test-writer', 'pr-creator'). Returns the skill's instructions wrapped in <activated_skill> tags.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The name of the skill to activate."},
+            },
+            "required": ["name"],
+        },
+    },
+}
+
+SUBAGENT_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "delegate_to_subagent",
+        "description": "Delegates a complex, multi-step, or turn-intensive task to a specialized subagent. The subagent operates autonomously and returns a comprehensive summary. Highly recommended to save main context window.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "subagent_name": {
+                    "type": "string", 
+                    "enum": ["codebase_investigator", "generalist"],
+                    "description": "The type of subagent to invoke. codebase_investigator for mapping/architecture, generalist for batch tasks."
+                },
+                "objective": {"type": "string", "description": "A comprehensive and detailed description of the task for the subagent."},
+            },
+            "required": ["subagent_name", "objective"],
+        },
+    },
+}
+
+REGISTERED_TOOLS: list[dict[str, Any]] = [
+    RUN_COMMAND_TOOL,
+    LIST_DIRECTORY_TOOL,
+    WRITE_FILE_TOOL,
+    READ_FILE_TOOL,
+    GREP_SEARCH_TOOL,
+    REPLACE_TOOL,
+    GLOB_TOOL,
+    READ_MANY_FILES_TOOL,
+    ASK_USER_TOOL,
+    WEB_FETCH_TOOL,
+    SAVE_MEMORY_TOOL,
+    WRITE_TODOS_TOOL,
+    ACTIVATE_SKILL_TOOL,
+    SUBAGENT_TOOL,
+]
 class MessageType(str, Enum):
     THOUGHT = "thought"
+    CONTENT = "content"
     PERMISSION_REQUEST = "permission_request"
     PERMISSION_RESPONSE = "permission_response"
+    ASK_USER = "ask_user"
+    ASK_USER_RESPONSE = "ask_user_response"
     FILE_EDIT = "file_edit"
     FINAL_ANSWER = "final_answer"
 
@@ -248,21 +458,21 @@ class ConnectionManager:
 
 class PermissionRegistry:
     def __init__(self) -> None:
-        self._futures: dict[str, asyncio.Future[bool]] = {}
+        self._futures: dict[str, asyncio.Future[Any]] = {}
         self._lock = asyncio.Lock()
 
-    async def create(self, request_id: str) -> asyncio.Future[bool]:
-        future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+    async def create(self, request_id: str) -> asyncio.Future[Any]:
+        future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
         async with self._lock:
             self._futures[request_id] = future
         return future
 
-    async def resolve(self, request_id: str, decision: bool) -> bool:
+    async def resolve(self, request_id: str, result: Any) -> bool:
         async with self._lock:
             future = self._futures.pop(request_id, None)
         if future is None or future.done():
             return False
-        future.set_result(decision)
+        future.set_result(result)
         return True
 
     async def discard(self, request_id: str) -> None:
@@ -662,8 +872,12 @@ class BrainOrchestrator:
         run_id: str,
         requested_by: str,
         streamed_output_chunks: list[str],
+        sender_name: str = "brain",
+        max_turns: int = 50,
     ) -> tuple[str, dict[str, Any]]:
-        while True:
+        turn_count = 0
+        while turn_count < max_turns:
+            turn_count += 1
             streamed_output_chunks.clear()
             response = await self._stream_llm_turn(
                 client_id=client_id,
@@ -671,6 +885,7 @@ class BrainOrchestrator:
                 requested_by=requested_by,
                 messages=conversation.messages,
                 streamed_output_chunks=streamed_output_chunks,
+                sender_name=sender_name,
             )
             response_id = str(response.get("id") or conversation.last_response_id or "")
             if response_id:
@@ -680,6 +895,7 @@ class BrainOrchestrator:
                 response=response,
                 run_id=run_id,
                 requested_by=requested_by,
+                sender_name=sender_name,
             )
             if tool_outputs:
                 assistant_tool_call_message = self._build_assistant_tool_call_message(response)
@@ -694,6 +910,7 @@ class BrainOrchestrator:
                 "model": response.get("model", self.llm.config.model),
                 "response_id": response.get("id"),
             }
+        return "Task aborted: Exceeded maximum allowed turns.", {"status": "error", "error": "max_turns_exceeded"}
 
     async def _stream_llm_turn(
         self,
@@ -703,13 +920,16 @@ class BrainOrchestrator:
         requested_by: str,
         messages: list[dict[str, Any]],
         streamed_output_chunks: list[str],
+        sender_name: str = "brain",
     ) -> dict[str, Any]:
         final_response: dict[str, Any] | None = None
         response_id: str | None = None
         response_model: str | None = self.llm.config.model
         pending_tool_calls: dict[str, dict[str, Any]] = {}
         stream_request_id = uuid4().hex
+        thought_id = f"thought-{uuid4().hex[:8]}"
         full_text = ""
+        buffer = "" # Semantic buffer
         streamed_output_chunks.clear()
 
         async for event in self.llm.stream_response_events(
@@ -728,23 +948,34 @@ class BrainOrchestrator:
                 if not content:
                     continue
                 full_text += content
+                buffer += content
+
+                # Send when buffer has a newline or is long enough
+                if "\n" in buffer or len(buffer) > 60:
+                    lines = buffer.split("\n")
+                    for line in lines[:-1]:
+                        # Send the line as CONTENT for proper terminal/UI rendering
+                        await _send_status(
+                            client_id, sender_name, MessageType.CONTENT, line + "\n",
+                            run_id=run_id, requested_by=requested_by,
+                            stream_event=event_type, stream_request_id=stream_request_id,
+                            thought_id=thought_id, channel="output", is_delta=True
+                        )
+                    buffer = lines[-1]
+
                 streamed_output_chunks.clear()
                 streamed_output_chunks.append(full_text)
-                await _send_status(
-                    client_id,
-                    "brain",
-                    MessageType.THOUGHT,
-                    full_text,
-                    run_id=run_id,
-                    requested_by=requested_by,
-                    stream_event=event_type,
-                    stream_request_id=stream_request_id,
-                )
             elif event_type in {"response.reasoning_summary_text.delta", "response.reasoning_text.delta"}:
                 delta = str(event.get("delta", "") or "")
                 if delta:
-                    await _send_status(client_id, "brain", MessageType.THOUGHT, delta, run_id=run_id, requested_by=requested_by, stream_event=event_type, stream_request_id=stream_request_id, channel="reasoning")
+                    # Format reasoning as a thought with a bold subject for better UI display
+                    await _send_status(client_id, sender_name, MessageType.THOUGHT, f"**Thinking** {delta}", run_id=run_id, requested_by=requested_by, stream_event=event_type, stream_request_id=stream_request_id, channel="reasoning", thought_id=thought_id, is_delta=True)
             elif event_type == "response.output_item.added":
+                # Flush buffer before tool call
+                if buffer.strip():
+                    await _send_status(client_id, sender_name, MessageType.CONTENT, buffer, run_id=run_id, requested_by=requested_by, stream_event="response.output_text.delta", stream_request_id=stream_request_id, thought_id=thought_id, channel="output", is_delta=True)
+                    buffer = ""
+                
                 item = event.get("item") or {}
                 if item.get("type") == "function_call":
                     call_id = str(item.get("call_id") or item.get("id") or uuid4().hex)
@@ -755,9 +986,14 @@ class BrainOrchestrator:
                         "name": item.get("name") or "unknown",
                         "arguments": str(item.get("arguments") or ""),
                     }
-                    await _send_status(client_id, "brain", MessageType.THOUGHT, f"Model is preparing tool call `{item.get('name', 'unknown')}`.", run_id=run_id, requested_by=requested_by, stream_event=event_type, stream_request_id=stream_request_id)
+                    # Use **Executing** format for tool calls to trigger the Step UI in Gemini CLI
+                    await _send_status(client_id, sender_name, MessageType.THOUGHT, f"**Executing** {item.get('name', 'unknown')}", run_id=run_id, requested_by=requested_by, stream_event=event_type, stream_request_id=stream_request_id, thought_id=thought_id, channel="status", update_mode="replace")
             elif event_type == "response.completed":
+                # Final flush
+                if buffer.strip():
+                    await _send_status(client_id, sender_name, MessageType.CONTENT, buffer, run_id=run_id, requested_by=requested_by, stream_event="response.output_text.delta", stream_request_id=stream_request_id, thought_id=thought_id, channel="output", is_delta=True)
                 final_response = dict(event.get("response") or {})
+
             elif event_type.endswith(".done") and isinstance(event.get("item"), dict):
                 item = event.get("item") or {}
                 if item.get("type") == "function_call":
@@ -769,7 +1005,7 @@ class BrainOrchestrator:
                         "name": item.get("name") or "unknown",
                         "arguments": str(item.get("arguments") or ""),
                     }
-                    await _send_status(client_id, "brain", MessageType.THOUGHT, f"Model finished tool call `{item.get('name', 'unknown')}` arguments.", run_id=run_id, requested_by=requested_by, stream_event=event_type, stream_request_id=stream_request_id)
+                    # We don't send a separate status for done to keep it compact
 
         if final_response is None and (full_text or pending_tool_calls):
             output_items: list[dict[str, Any]] = []
@@ -833,6 +1069,7 @@ class BrainOrchestrator:
             })
         return messages
 
+
     async def _handle_tool_calls(
         self,
         *,
@@ -840,12 +1077,24 @@ class BrainOrchestrator:
         response: dict[str, Any],
         run_id: str,
         requested_by: str,
+        sender_name: str = "brain",
     ) -> list[dict[str, Any]]:
         outputs: list[dict[str, Any]] = []
         handlers = {
             "run_command": self._run_command_tool,
             "list_directory": self._run_list_directory_tool,
             "write_file": self._run_write_file_tool,
+            "read_file": self._run_read_file_tool,
+            "grep_search": self._run_grep_search_tool,
+            "replace": self._run_replace_tool,
+            "glob": self._run_glob_tool,
+            "read_many_files": self._run_read_many_files_tool,
+            "ask_user": self._run_ask_user_tool,
+            "web_fetch": self._run_web_fetch_tool,
+            "save_memory": self._run_save_memory_tool,
+            "write_todos": self._run_write_todos_tool,
+            "activate_skill": self._run_activate_skill_tool,
+            "delegate_to_subagent": self._run_subagent_tool,
         }
         for item in response.get("output") or []:
             if not isinstance(item, dict) or item.get("type") != "function_call":
@@ -856,18 +1105,283 @@ class BrainOrchestrator:
             if handler is None:
                 tool_result = {"ok": False, "error": f"Unknown tool {tool_name}."}
             else:
-                tool_result = await handler(
-                    client_id=client_id,
-                    arguments_raw=str(item.get("arguments", "") or "{}"),
-                    run_id=run_id,
-                    requested_by=requested_by,
-                )
+                # Some tools need extra context (like subagent), most don't. We pass standard kwargs.
+                kwargs = {
+                    "client_id": client_id,
+                    "arguments_raw": str(item.get("arguments", "") or "{}"),
+                    "run_id": run_id,
+                    "requested_by": requested_by,
+                }
+                if tool_name == "delegate_to_subagent":
+                    kwargs["sender_name"] = sender_name
+                
+                tool_result = await handler(**kwargs)
             outputs.append({
                 "type": "function_call_output",
                 "call_id": call_id,
                 "output": json.dumps(tool_result, ensure_ascii=False),
             })
         return outputs
+
+    async def _run_activate_skill_tool(self, *, client_id: str, arguments_raw: str, run_id: str, requested_by: str) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None: return error
+        skill_name = str(arguments.get("name") or "")
+        await _send_status(client_id, "brain", MessageType.THOUGHT, f"**Activating** skill: {skill_name}...", run_id=run_id, requested_by=requested_by, tool_name="activate_skill", kind="tool_running")
+        return _execute_activate_skill(arguments)
+
+    async def _run_subagent_tool(self, *, client_id: str, arguments_raw: str, run_id: str, requested_by: str, sender_name: str) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None: return error
+        
+        subagent_name = str(arguments.get("subagent_name") or "subagent")
+        objective = str(arguments.get("objective") or "")
+        
+        if sender_name != "brain":
+             return {"ok": False, "error": "Nested subagents are not allowed to prevent infinite recursion."}
+        
+        await _send_status(client_id, "brain", MessageType.THOUGHT, f"🚀 Delegating to Subagent: {subagent_name}\nObjective: {objective}", run_id=run_id, requested_by=requested_by, tool_name="delegate_to_subagent", kind="tool_running")
+        
+        # Create an isolated conversation for the subagent
+        sub_conversation = ConversationState()
+        sub_instructions = f"You are an expert subagent named '{subagent_name}'. Your objective is:\n<objective>\n{objective}\n</objective>\nUse your tools to investigate or execute tasks. When finished, provide a comprehensive summary of your findings or actions to the main agent. Do NOT ask the user questions unless absolutely blocked."
+        sub_conversation.messages.append({"role": "system", "content": sub_instructions})
+        sub_conversation.messages.append({"role": "user", "content": "Begin your objective now."})
+        
+        sub_streamed_chunks = []
+        try:
+            # We run the turn loop but pass the subagent_name so UI shows it differently
+            final_report, _ = await self._run_turn_loop(
+                client_id=client_id,
+                conversation=sub_conversation,
+                run_id=run_id,
+                requested_by=requested_by,
+                streamed_output_chunks=sub_streamed_chunks,
+                sender_name=f"subagent-{subagent_name}",
+                max_turns=15 # Safety limit for subagents
+            )
+            await _send_status(client_id, "brain", MessageType.THOUGHT, f"✅ Subagent {subagent_name} finished.", run_id=run_id, requested_by=requested_by, tool_name="delegate_to_subagent", kind="tool_done")
+            return {"ok": True, "subagent": subagent_name, "report": final_report}
+        except Exception as exc:
+             return {"ok": False, "error": f"Subagent crashed: {exc}"}
+
+    async def _run_web_fetch_tool(self, *, client_id: str, arguments_raw: str, run_id: str, requested_by: str) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None: return error
+        url = str(arguments.get("url") or "")
+        await _send_status(client_id, "brain", MessageType.THOUGHT, f"**Fetching** URL: {url}", run_id=run_id, requested_by=requested_by, tool_name="web_fetch", kind="tool_running")
+        return _execute_web_fetch(arguments)
+
+    async def _run_save_memory_tool(self, *, client_id: str, arguments_raw: str, run_id: str, requested_by: str) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None: return error
+        fact = str(arguments.get("fact") or "")
+        await _send_status(client_id, "brain", MessageType.THOUGHT, f"Saving to memory: {fact}", run_id=run_id, requested_by=requested_by, tool_name="save_memory", kind="tool_running")
+        return _execute_save_memory(arguments)
+
+    async def _run_write_todos_tool(self, *, client_id: str, arguments_raw: str, run_id: str, requested_by: str) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None: return error
+        await _send_status(client_id, "brain", MessageType.THOUGHT, "Updating TODO.md...", run_id=run_id, requested_by=requested_by, tool_name="write_todos", kind="tool_running")
+        return _execute_write_todos(arguments)
+
+    async def _run_ask_user_tool(
+        self,
+        *,
+        client_id: str,
+        arguments_raw: str,
+        run_id: str,
+        requested_by: str,
+    ) -> dict[dict[str, Any]]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None:
+            return error
+
+        question = str(arguments.get("question") or "No question provided.")
+        request_id = uuid4().hex
+        response_future = await self.permissions.create(request_id)
+        
+        await manager.send_to(
+            client_id,
+            _build_message(
+                "brain",
+                MessageType.ASK_USER,
+                question,
+                run_id=run_id,
+                requested_by=requested_by,
+                request_id=request_id,
+                tool_name="ask_user",
+                kind="user_input_needed",
+            ),
+        )
+
+        try:
+            # Re-using PERMISSION_TIMEOUT_SECONDS for ask_user
+            answer = await asyncio.wait_for(response_future, timeout=PERMISSION_TIMEOUT_SECONDS)
+            return {"ok": True, "answer": answer, "request_id": request_id}
+        except asyncio.TimeoutError:
+            await self.permissions.discard(request_id)
+            return {"ok": False, "error": "User did not respond within the timeout period.", "request_id": request_id}
+
+    async def _run_glob_tool(
+        self,
+        *,
+        client_id: str,
+        arguments_raw: str,
+        run_id: str,
+        requested_by: str,
+    ) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None:
+            return error
+
+        pattern = str(arguments.get("pattern") or "")
+        reason = str(arguments.get("reason") or f"Finding files matching: {pattern}")
+        await _send_status(
+            client_id,
+            "brain",
+            MessageType.THOUGHT,
+            reason,
+            run_id=run_id,
+            requested_by=requested_by,
+            tool_name="glob",
+            pattern=pattern,
+            kind="tool_running",
+        )
+        return _execute_glob(arguments)
+
+    async def _run_read_many_files_tool(
+        self,
+        *,
+        client_id: str,
+        arguments_raw: str,
+        run_id: str,
+        requested_by: str,
+    ) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None:
+            return error
+
+        file_paths = arguments.get("file_paths") or []
+        reason = str(arguments.get("reason") or f"Reading {len(file_paths)} files batch")
+        await _send_status(
+            client_id,
+            "brain",
+            MessageType.THOUGHT,
+            reason,
+            run_id=run_id,
+            requested_by=requested_by,
+            tool_name="read_many_files",
+            count=len(file_paths),
+            kind="tool_running",
+        )
+        return _execute_read_many_files(arguments)
+
+    async def _run_replace_tool(
+        self,
+        *,
+        client_id: str,
+        arguments_raw: str,
+        run_id: str,
+        requested_by: str,
+    ) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None:
+            return error
+
+        path_hint = str(arguments.get("file_path") or "")
+        reason = str(arguments.get("reason") or f"Replacing text in {path_hint}")
+        request_id = uuid4().hex
+        permission_future = await self.permissions.create(request_id)
+        await _send_status(
+            client_id,
+            "brain",
+            MessageType.PERMISSION_REQUEST,
+            reason,
+            run_id=run_id,
+            requested_by=requested_by,
+            request_id=request_id,
+            path=path_hint,
+            tool_name="replace",
+            warning="Model requested a surgical file edit.",
+            kind="approval_needed",
+        )
+
+        try:
+            approved = await asyncio.wait_for(permission_future, timeout=PERMISSION_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            await self.permissions.discard(request_id)
+            return {"ok": False, "approved": False, "request_id": request_id, "error": "Permission request timed out before the user answered."}
+        
+        if not approved:
+            return {"ok": False, "approved": False, "request_id": request_id, "error": "User denied the replace request."}
+
+        result = _execute_replace(arguments)
+        if result.get("ok"):
+            await self.manager.send_to(
+                client_id,
+                AgentMessage(
+                    sender="brain",
+                    msg_type=MessageType.FILE_EDIT,
+                    content=str(arguments.get("new_string", "")),
+                    meta={"run_id": run_id, "requested_by": requested_by, "request_id": request_id, "tool_name": "replace", **result},
+                ),
+            )
+        return {"ok": result.get("ok", False), "approved": True, "request_id": request_id, **result}
+
+    async def _run_read_file_tool(
+        self,
+        *,
+        client_id: str,
+        arguments_raw: str,
+        run_id: str,
+        requested_by: str,
+    ) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None:
+            return error
+
+        path_hint = str(arguments.get("file_path") or arguments.get("path") or "")
+        reason = str(arguments.get("reason") or f"Reading file: {path_hint}")
+        await _send_status(
+            client_id,
+            "brain",
+            MessageType.THOUGHT,
+            reason,
+            run_id=run_id,
+            requested_by=requested_by,
+            tool_name="read_file",
+            path=path_hint,
+            kind="tool_running",
+        )
+        return _execute_read_file(arguments)
+
+    async def _run_grep_search_tool(
+        self,
+        *,
+        client_id: str,
+        arguments_raw: str,
+        run_id: str,
+        requested_by: str,
+    ) -> dict[str, Any]:
+        arguments, error = _decode_tool_arguments(arguments_raw)
+        if error is not None:
+            return error
+
+        pattern = str(arguments.get("pattern") or "")
+        reason = str(arguments.get("reason") or f"Searching for pattern: {pattern}")
+        await _send_status(
+            client_id,
+            "brain",
+            MessageType.THOUGHT,
+            reason,
+            run_id=run_id,
+            requested_by=requested_by,
+            tool_name="grep_search",
+            pattern=pattern,
+            kind="tool_running",
+        )
+        return _execute_grep_search(arguments)
 
     async def _run_write_file_tool(
         self,
@@ -1170,6 +1684,341 @@ def _iter_directory_entries(
     return entries
 
 
+def _execute_glob(arguments: dict[str, Any]) -> dict[str, Any]:
+    pattern = str(arguments.get("pattern") or "").strip()
+    dir_path = str(arguments.get("dir_path") or ".").strip() or "."
+    include_hidden = bool(arguments.get("include_hidden", False))
+
+    if not pattern:
+        return _tool_error("glob requires a pattern.", error_type="missing_pattern")
+
+    try:
+        resolved_dir = _resolve_directory_path(dir_path)
+    except Exception as exc:
+        return _tool_error(f"Invalid search directory: {exc}", error_type="invalid_dir", path=dir_path)
+
+    try:
+        # Use Path.glob for recursive search if pattern contains **
+        results = []
+        # Support both simple glob and recursive glob
+        search_root = resolved_dir
+        
+        # Security: ensure search remains within workspace
+        for p in search_root.glob(pattern):
+            try:
+                # Resolve each found path and check workspace relative
+                p_resolved = p.resolve()
+                if not include_hidden and _is_hidden_path(p_resolved.relative_to(WORKSPACE_ROOT)):
+                    continue
+                results.append(str(p_resolved.relative_to(WORKSPACE_ROOT)))
+            except (ValueError, RuntimeError):
+                continue # Skip paths outside workspace or other resolution errors
+        
+        return {
+            "ok": True,
+            "pattern": pattern,
+            "dir_path": dir_path,
+            "matches": sorted(results)[:500], # Limit results to prevent overwhelming
+            "total_matches": len(results),
+        }
+    except Exception as exc:
+        return _tool_error(f"Glob search failed: {exc}", error_type="glob_error")
+
+
+def _execute_read_many_files(arguments: dict[str, Any]) -> dict[str, Any]:
+    file_paths = arguments.get("file_paths")
+    if not isinstance(file_paths, list):
+        return _tool_error("read_many_files requires a list of file_paths.", error_type="invalid_arguments")
+
+    results = []
+    total_bytes = 0
+    BYTE_LIMIT = 50 * 1024 # 50KB limit for batch reading to protect context
+    
+    for path_str in file_paths:
+        try:
+            resolved = _resolve_workspace_path(str(path_str))
+            if not resolved.exists() or not resolved.is_file():
+                results.append({"path": path_str, "ok": False, "error": "Not found or not a file"})
+                continue
+            
+            content = resolved.read_text(encoding="utf-8", errors="replace")
+            file_bytes = len(content.encode("utf-8"))
+            
+            if total_bytes + file_bytes > BYTE_LIMIT:
+                results.append({
+                    "path": path_str, 
+                    "ok": True, 
+                    "content": content[: (BYTE_LIMIT - total_bytes)] + "\n... [TRUNCATED due to batch limit]",
+                    "truncated": True
+                })
+                break # Stop reading further files
+            
+            results.append({"path": path_str, "ok": True, "content": content, "size": file_bytes})
+            total_bytes += file_bytes
+        except Exception as exc:
+            results.append({"path": str(path_str), "ok": False, "error": str(exc)})
+
+    return {
+        "ok": True,
+        "files": results,
+        "total_files_attempted": len(file_paths),
+        "total_bytes_read": total_bytes,
+        "byte_limit": BYTE_LIMIT
+    }
+
+
+def _execute_web_fetch(arguments: dict[str, Any]) -> dict[str, Any]:
+    url = str(arguments.get("url") or "").strip()
+    if not url:
+        return _tool_error("web_fetch requires a url.", error_type="missing_url")
+    
+    if not url.startswith(("http://", "https://")):
+        return _tool_error("web_fetch only supports HTTP/HTTPS URLs.", error_type="invalid_url")
+
+    import urllib.request
+    import urllib.error
+    
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=15) as response:
+            content_type = response.headers.get_content_type()
+            # Basic check to avoid downloading huge binaries
+            if content_type and not any(t in content_type for t in ["text/", "json", "xml"]):
+                 return _tool_error(f"Unsupported content type: {content_type}", error_type="unsupported_content")
+            
+            html = response.read().decode('utf-8', errors='replace')
+            
+            # Very basic tag stripping for cleaner context
+            text = re.sub(r'<style.*?>.*?</style>', '', html, flags=re.IGNORECASE|re.DOTALL)
+            text = re.sub(r'<script.*?>.*?</script>', '', text, flags=re.IGNORECASE|re.DOTALL)
+            text = re.sub(r'<[^>]+>', ' ', text)
+            text = re.sub(r'\s+', ' ', text).strip()
+            
+            # Truncate if too long (e.g., > 50KB)
+            limit = 50000
+            truncated = False
+            if len(text) > limit:
+                text = text[:limit] + "\n...[TRUNCATED]"
+                truncated = True
+                
+            return {"ok": True, "url": url, "content": text, "truncated": truncated}
+    except Exception as exc:
+        return _tool_error(f"Failed to fetch URL: {exc}", error_type="fetch_error", url=url)
+
+
+def _execute_save_memory(arguments: dict[str, Any]) -> dict[str, Any]:
+    fact = str(arguments.get("fact") or "").strip()
+    if not fact:
+        return _tool_error("save_memory requires a fact.", error_type="missing_fact")
+        
+    memory_file = Path.home() / ".agent_universe" / "memory.md"
+    memory_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        content = ""
+        if memory_file.exists():
+            content = memory_file.read_text(encoding="utf-8")
+            
+        content += f"\n- {fact}"
+        memory_file.write_text(content.strip(), encoding="utf-8")
+        
+        return {"ok": True, "fact": fact, "saved_to": str(memory_file)}
+    except Exception as exc:
+        return _tool_error(f"Failed to save memory: {exc}", error_type="memory_error")
+
+
+def _execute_write_todos(arguments: dict[str, Any]) -> dict[str, Any]:
+    content = str(arguments.get("content") or "").strip()
+    if not content:
+        return _tool_error("write_todos requires content.", error_type="missing_content")
+        
+    todo_file = WORKSPACE_ROOT / "TODO.md"
+    
+    try:
+        todo_file.write_text(content, encoding="utf-8")
+        return {"ok": True, "path": str(todo_file), "bytes_written": len(content.encode("utf-8"))}
+    except Exception as exc:
+        return _tool_error(f"Failed to write TODOs: {exc}", error_type="todo_error")
+
+
+def _execute_activate_skill(arguments: dict[str, Any]) -> dict[str, Any]:
+    skill_name = str(arguments.get("name") or "").strip()
+    if not skill_name:
+        return _tool_error("activate_skill requires a name.", error_type="missing_name")
+        
+    skills_dir = WORKSPACE_ROOT / ".agent_universe" / "skills"
+    skill_file = skills_dir / f"{skill_name}.md"
+    
+    if not skill_file.exists():
+        # Auto-create a mock skill file for demonstration if it doesn't exist
+        skills_dir.mkdir(parents=True, exist_ok=True)
+        mock_content = f"""# Skill: {skill_name}\n\nYou are acting as a specialized expert in {skill_name}. Focus strictly on this domain. Provide clear, structural advice and leverage tools effectively."""
+        skill_file.write_text(mock_content, encoding="utf-8")
+        
+    try:
+        content = skill_file.read_text(encoding="utf-8")
+        wrapped = f"<activated_skill name=\"{skill_name}\">\n{content}\n</activated_skill>"
+        return {"ok": True, "skill": skill_name, "instructions": wrapped}
+    except Exception as exc:
+        return _tool_error(f"Failed to read skill {skill_name}: {exc}", error_type="skill_error")
+
+
+def _execute_replace(arguments: dict[str, Any]) -> dict[str, Any]:
+    raw_path = str(arguments.get("file_path") or "").strip()
+    old_string = str(arguments.get("old_string") or "")
+    new_string = str(arguments.get("new_string") or "")
+    allow_multiple = bool(arguments.get("allow_multiple", False))
+
+    if not raw_path:
+        return _tool_error("replace requires a file_path.", error_type="missing_path")
+    if not old_string:
+        return _tool_error("replace requires an old_string to find.", error_type="missing_old_string")
+
+    try:
+        resolved = _resolve_workspace_path(raw_path)
+    except ValueError as exc:
+        return _tool_error(str(exc), error_type="path_not_allowed", path=raw_path)
+
+    if not resolved.exists():
+        return _tool_error(f"File not found: {raw_path}", error_type="not_found", path=raw_path)
+    
+    try:
+        content = resolved.read_text(encoding="utf-8")
+        count = content.count(old_string)
+        
+        if count == 0:
+            return _tool_error(f"Could not find exact match for old_string in {raw_path}", error_type="no_match")
+        if count > 1 and not allow_multiple:
+            return _tool_error(f"Found {count} occurrences of old_string in {raw_path}. Provide more context or set allow_multiple=True.", error_type="ambiguous_match", count=count)
+        
+        new_content = content.replace(old_string, new_string) if allow_multiple else content.replace(old_string, new_string, 1)
+        resolved.write_text(new_content, encoding="utf-8")
+        
+        return {
+            "ok": True,
+            "path": raw_path,
+            "count": count if allow_multiple else 1,
+            "operation": "replace",
+            "bytes_written": len(new_content.encode("utf-8")),
+        }
+    except Exception as exc:
+        return _tool_error(f"Failed to execute replace: {exc}", error_type="replace_error", path=raw_path)
+
+
+def _execute_read_file(arguments: dict[str, Any]) -> dict[str, Any]:
+    raw_path = str(arguments.get("file_path") or arguments.get("path") or "").strip()
+    start_line = _coerce_int(arguments.get("start_line"), default=1, minimum=1)
+    end_line = _coerce_int(arguments.get("end_line"), default=0, minimum=0)
+
+    if not raw_path:
+        return _tool_error("read_file requires a file_path.", error_type="missing_path")
+
+    try:
+        resolved = _resolve_workspace_path(raw_path)
+    except ValueError as exc:
+        return _tool_error(str(exc), error_type="path_not_allowed", path=raw_path)
+
+    if not resolved.exists():
+        return _tool_error(f"File not found: {raw_path}", error_type="not_found", path=raw_path)
+    if not resolved.is_file():
+        return _tool_error(f"Path is not a file: {raw_path}", error_type="not_a_file", path=raw_path)
+
+    try:
+        import itertools
+        with resolved.open("r", encoding="utf-8", errors="replace") as f:
+            if end_line > 0:
+                # 1-based to 0-based slice
+                lines = list(itertools.islice(f, start_line - 1, end_line))
+            else:
+                lines = list(itertools.islice(f, start_line - 1, None))
+            
+            content = "".join(lines)
+            return {
+                "ok": True,
+                "path": raw_path,
+                "resolved_path": str(resolved),
+                "content": content,
+                "start_line": start_line,
+                "end_line": end_line if end_line > 0 else (start_line + len(lines) - 1),
+                "total_lines_read": len(lines),
+            }
+    except Exception as exc:
+        return _tool_error(f"Failed to read file: {exc}", error_type="read_error", path=raw_path)
+
+
+def _execute_grep_search(arguments: dict[str, Any]) -> dict[str, Any]:
+    pattern = str(arguments.get("pattern") or "").strip()
+    include_pattern = str(arguments.get("include_pattern") or "").strip()
+    dir_path = str(arguments.get("dir_path") or ".").strip() or "."
+    context = _coerce_int(arguments.get("context"), default=0, minimum=0, maximum=10)
+
+    if not pattern:
+        return _tool_error("grep_search requires a pattern.", error_type="missing_pattern")
+
+    try:
+        resolved_dir = _resolve_directory_path(dir_path)
+    except Exception as exc:
+        return _tool_error(f"Invalid search directory: {exc}", error_type="invalid_dir", path=dir_path)
+
+    # Try ripgrep first
+    try:
+        rg_cmd = ["rg", "--json", "-e", pattern]
+        if include_pattern:
+            rg_cmd.extend(["-g", include_pattern])
+        if context > 0:
+            rg_cmd.extend(["-C", str(context)])
+        rg_cmd.append(str(resolved_dir))
+
+        completed = subprocess.run(rg_cmd, capture_output=True, text=True, timeout=30, check=False)
+        if completed.returncode in {0, 1}:  # 0: found, 1: not found
+            matches = []
+            for line in completed.stdout.splitlines():
+                if not line.strip(): continue
+                try:
+                    data = json.loads(line)
+                    if data.get("type") == "match":
+                        payload = data.get("data", {})
+                        matches.append({
+                            "path": os.path.relpath(payload.get("path", {}).get("text", ""), str(WORKSPACE_ROOT)),
+                            "line_number": payload.get("line_number"),
+                            "content": payload.get("lines", {}).get("text", "").strip(),
+                            "submatches": payload.get("submatches", [])
+                        })
+                except: continue
+            return {"ok": True, "matches": matches[:100], "total_matches": len(matches), "engine": "ripgrep"}
+    except FileNotFoundError:
+        pass # rg not installed, fallback to python
+    except Exception:
+        pass
+
+    # Fallback to Python-based search
+    matches = []
+    regex = re.compile(pattern, re.IGNORECASE)
+    count = 0
+    for root, dirs, files in os.walk(resolved_dir):
+        # Apply ignore patterns similar to list_directory if needed
+        for file in files:
+            if include_pattern and not fnmatch.fnmatch(file, include_pattern):
+                continue
+            full_path = Path(root) / file
+            try:
+                with full_path.open("r", encoding="utf-8", errors="replace") as f:
+                    for i, line in enumerate(f, 1):
+                        if regex.search(line):
+                            matches.append({
+                                "path": os.path.relpath(full_path, str(WORKSPACE_ROOT)),
+                                "line_number": i,
+                                "content": line.strip()
+                            })
+                            count += 1
+                            if count >= 100: break
+            except: continue
+            if count >= 100: break
+        if count >= 100: break
+    
+    return {"ok": True, "matches": matches, "total_matches": len(matches), "engine": "python_regex"}
+
+
 def _execute_list_directory(arguments: dict[str, Any]) -> dict[str, Any]:
     raw_path = str(arguments.get("path") or arguments.get("dir_path") or ".").strip() or "."
     recursive = bool(arguments.get("recursive", False))
@@ -1457,6 +2306,17 @@ async def route_message(client_id: str, message: AgentMessage) -> None:
         await manager.send_to(client_id, message)
         if not resolved:
             await _send_status(client_id, "brain", MessageType.THOUGHT, f"Received stale permission response for request {request_id}.", request_id=request_id, decision=decision)
+        return
+
+    if message.msg_type == MessageType.ASK_USER_RESPONSE:
+        request_id = _extract_permission_request_id(message)
+        if not request_id:
+            raise ValueError("AskUser response is missing meta.request_id")
+        answer = message.content
+        resolved = await permissions.resolve(request_id, answer)
+        await manager.send_to(client_id, message)
+        if not resolved:
+            await _send_status(client_id, "brain", MessageType.THOUGHT, f"Received stale response for ask_user {request_id}.", request_id=request_id)
         return
 
     await manager.send_to(client_id, message)
